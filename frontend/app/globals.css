@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg: #ffffff;
+    --bg-secondary: #f7f7f5;
+    --bg-hover: #efefef;
+    --border: #e8e8e6;
+    --text: #1a1a1a;
+    --text-secondary: #787774;
+    --text-muted: #acaba8;
+    --brand: #3b5bfc;
+    --brand-hover: #2a3ef1;
+    --sidebar-width: 260px;
+  }
+
+  .dark {
+    --bg: #191919;
+    --bg-secondary: #252525;
+    --bg-hover: #2f2f2f;
+    --border: #373737;
+    --text: #e8e8e6;
+    --text-secondary: #9b9b97;
+    --text-muted: #5c5c58;
+    --brand: #6085ff;
+    --brand-hover: #93b0ff;
+  }
+
+  * {
+    @apply border-[var(--border)];
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: "Inter", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .text-secondary { color: var(--text-secondary); }
+  .text-muted     { color: var(--text-muted); }
+  .bg-page        { background-color: var(--bg); }
+  .bg-secondary   { background-color: var(--bg-secondary); }
+  .bg-hover:hover { background-color: var(--bg-hover); }
+  .border-subtle  { border-color: var(--border); }
+}
+
+/* BlockNote editor resets */
+.bn-editor {
+  font-family: "Inter", sans-serif !important;
+  font-size: 16px !important;
+}
+
+.bn-editor .bn-block-outer:first-child > .bn-block > .bn-block-content {
+  font-size: 1.875rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
