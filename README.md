@@ -2,6 +2,8 @@
 
 Workspace blok modern untuk dokumen, tabel, rumus, kode, dan presentasi. Aplikasi bisa langsung dipakai dalam mode lokal tanpa database, lalu dihubungkan ke Supabase/PostgreSQL untuk autentikasi, penyimpanan cloud, presence, dan sinkronisasi realtime.
 
+Versi produksi: [pratamalab.barengin.store](https://pratamalab.barengin.store)
+
 ## Fitur
 
 - **Editor blok** — ketik `/` untuk menyisipkan 13 jenis blok (teks, judul, daftar tugas, poin, nomor, kutipan, sorotan, rumus, tabel, kode, garis pembatas).
