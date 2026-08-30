@@ -753,35 +753,40 @@ fontFamily: { sans: ["NamaFont", "sans-serif"] }
 ## 11. Cara Menjalankan
 
 ### Otomatis (1 klik)
-Dobel-klik file `start.bat` di root folder. Akan membuka 4 terminal otomatis.
+Dobel-klik file `start.bat` di root folder. Akan membuka terminal untuk Reverb, Queue, dan Frontend.
 
-### Manual
+> **Catatan:** Backend Laravel di-serve langsung oleh **Nginx** — tidak perlu `php artisan serve`.
+> Pastikan Laragon sudah running (MySQL + Nginx aktif).
 
-**Terminal 1 — API Laravel:**
-```bash
-cd C:/laragon/www/pratamalab/backend
-php artisan serve --port=8000
-```
+### URL Akses
 
-**Terminal 2 — WebSocket Reverb:**
+| Service | Via localhost | Via Nginx domain |
+|---|---|---|
+| Frontend | http://localhost:3000 | http://app.pratamalab.test |
+| Backend API | http://localhost:8000 (artisan serve) | http://pratamalab.test |
+| WebSocket | localhost:8080 | ws://ws.pratamalab.test |
+
+### Manual (3 terminal saja)
+
+**Terminal 1 — WebSocket Reverb:**
 ```bash
 cd C:/laragon/www/pratamalab/backend
 php artisan reverb:start
 ```
 
-**Terminal 3 — Queue Worker:**
+**Terminal 2 — Queue Worker:**
 ```bash
 cd C:/laragon/www/pratamalab/backend
 php artisan queue:work
 ```
 
-**Terminal 4 — Frontend Next.js:**
+**Terminal 3 — Frontend Next.js:**
 ```bash
 cd C:/laragon/www/pratamalab/frontend
 npm run dev
 ```
 
-Buka browser: **http://localhost:3000**
+Buka browser: **http://app.pratamalab.test** atau **http://localhost:3000**
 
 ### Demo Account
 - Email: `demo@pratamalab.com`
