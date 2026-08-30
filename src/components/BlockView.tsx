@@ -1,88 +1,195 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { Block, FocusReq, SlashDef } from "../types";
 import Editable from "./Editable";
 import FormulaBlock from "./FormulaBlock";
 import TableBlock from "./TableBlock";
 import SlashMenu from "./SlashMenu";
-import {
-  IcArrowDown, IcArrowUp, IcCopy, IcGrip, IcPlus, IcTrash,
-} from "./icons";
+import { isSafeHttpUrl } from "../lib/util";
+
+// ─── Types ───────────────────────────────────────────────────
 
 export interface BlockHandlers {
-  onChange: (id: string, html: string, plain: string) => void;
-  onEnter: (id: string, offset: number) => void;
+  onChange:         (id: string, html: string, plain: string) => void;
+  onEnter:          (id: string, offset: number) => void;
   onBackspaceStart: (id: string) => void;
-  onArrow: (id: string, dir: "up" | "down") => void;
-  onSlashKey: (id: string, e: ReactKeyboardEvent<HTMLDivElement>) => boolean;
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
-  onDuplicate: (id: string) => void;
-  onMove: (id: string, dir: "up" | "down") => void;
-  onPlus: (id: string) => void;
-  onFormulaChange: (id: string, expr: string) => void;
-  onRowsChange: (id: string, rows: string[][]) => void;
-  onCodeChange: (id: string, code: string) => void;
-  onCodeLang: (id: string, lang: string) => void;
-  onCalloutIcon: (id: string) => void;
-  onToast: (msg: string) => void;
-  focusReq: FocusReq | null;
+  onArrow:          (id: string, dir: "up" | "down") => void;
+  onSlashKey:       (id: string, e: ReactKeyboardEvent<HTMLDivElement>) => boolean;
+  onToggle:         (id: string) => void;
+  onDelete:         (id: string) => void;
+  onDuplicate:      (id: string) => void;
+  onMove:           (id: string, dir: "up" | "down") => void;
+  onPlus:           (id: string) => void;
+  onFormulaChange:  (id: string, expr: string) => void;
+  onRowsChange:     (id: string, rows: string[][]) => void;
+  onCodeChange:     (id: string, code: string) => void;
+  onCodeLang:       (id: string, lang: string) => void;
+  onPropsChange:    (id: string, props: Record<string, unknown>) => void;
+  onCalloutIcon:    (id: string) => void;
+  onToast:          (msg: string) => void;
+  focusReq:         FocusReq | null;
 }
 
 export interface SlashState {
-  query: string;
-  idx: number;
-  items: SlashDef[];
-  onIdx: (i: number) => void;
+  query:  string;
+  idx:    number;
+  items:  SlashDef[];
+  onIdx:  (i: number) => void;
   onPick: (d: SlashDef) => void;
 }
 
+// ─── Placeholders ────────────────────────────────────────────
+
 const PH: Partial<Record<Block["type"], string>> = {
-  text: "Ketik sesuatu, atau tekan / untuk perintah…",
-  h1: "Judul 1",
-  h2: "Judul 2",
-  h3: "Judul 3",
-  todo: "Tulis tugas…",
-  bullet: "Tulis poin…",
+  text:     "Ketik sesuatu, atau tekan / untuk perintah…",
+  h1:       "Judul 1",
+  h2:       "Judul 2",
+  h3:       "Judul 3",
+  todo:     "Tugas baru…",
+  bullet:   "Tulis poin…",
   numbered: "Tulis poin bernomor…",
-  quote: "Tulis kutipan…",
-  callout: "Tulis sorotan…",
+  quote:    "Tulis kutipan…",
+  callout:  "Tulis sorotan…",
+  toggle:   "Toggle — klik untuk buka/tutup",
 };
 
-const LANGS = ["js", "ts", "python", "sql", "html", "css", "bash", "json"];
+const LANGS = ["js","ts","tsx","python","sql","html","css","bash","json","rust","go","java","php","cpp"];
+
+// ─── Rich Text Toolbar ───────────────────────────────────────
+
+function RichToolbar({ onFormat }: { onFormat: (cmd: string, val?: string) => void }) {
+  const tools = [
+    { cmd: "bold",          icon: <strong style={{ fontSize: 12, fontFamily: "var(--font-mono)" }}>B</strong>,     title: "Tebal (Ctrl+B)" },
+    { cmd: "italic",        icon: <em style={{ fontSize: 12 }}>I</em>,                                              title: "Miring (Ctrl+I)" },
+    { cmd: "underline",     icon: <u style={{ fontSize: 12 }}>U</u>,                                               title: "Garis bawah (Ctrl+U)" },
+    { cmd: "strikethrough", icon: <s style={{ fontSize: 11 }}>S</s>,                                               title: "Coret" },
+    { cmd: "_code",         icon: <code style={{ fontSize: 10, fontFamily: "var(--font-mono)" }}>{"`"}</code>,       title: "Kode inline" },
+    { cmd: "_link",         icon: <span style={{ fontSize: 11 }}>🔗</span>,                                         title: "Tautan" },
+  ];
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: "calc(100% + 6px)",
+        left: "50%",
+        transform: "translateX(-50%)",
+        display: "flex",
+        alignItems: "center",
+        gap: 2,
+        background: "var(--sidebar-bg)",
+        border: "1px solid rgba(255,255,255,0.1)",
+        borderRadius: 10,
+        padding: "4px 5px",
+        boxShadow: "var(--shadow-xl)",
+        zIndex: 300,
+        animation: "pop-in 0.15s var(--ease-spring) both",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {tools.map((t) => (
+        <button
+          key={t.cmd}
+          onMouseDown={(e) => { e.preventDefault(); onFormat(t.cmd); }}
+          title={t.title}
+          style={{
+            background: "transparent", border: "none",
+            borderRadius: 6, padding: "4px 7px",
+            cursor: "pointer", color: "#fff",
+            display: "grid", placeItems: "center",
+            transition: "background 0.12s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          {t.icon}
+        </button>
+      ))}
+      <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.15)", margin: "0 3px" }} />
+      {/* Text color */}
+      {["#6366f1","#ef4444","#f59e0b","#22c55e","#3b82f6"].map((color) => (
+        <button
+          key={color}
+          onMouseDown={(e) => { e.preventDefault(); onFormat("foreColor", color); }}
+          title={`Warna ${color}`}
+          style={{
+            width: 14, height: 14, borderRadius: "50%",
+            background: color, border: "none", cursor: "pointer",
+            margin: "0 1px",
+            transition: "transform 0.12s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.3)")}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Code Block ──────────────────────────────────────────────
 
 function CodeBlock({ block, h }: { block: Block; h: BlockHandlers }) {
   const lines = Math.max(3, block.html.split("\n").length);
   return (
-    <div className="my-1 overflow-hidden rounded-xl border border-ink-line bg-ink shadow-sm transition-shadow hover:shadow-lg">
-      <div className="flex items-center justify-between gap-2 border-b border-ink-line px-3.5 py-1.5">
-        <div className="flex items-center gap-2">
-          <span className="flex gap-1">
-            <span className="h-2 w-2 rounded-full bg-[#3a4250]" />
-            <span className="h-2 w-2 rounded-full bg-[#3a4250]" />
-            <span className="h-2 w-2 rounded-full bg-pine/70" />
+    <div style={{
+      margin: "4px 0",
+      borderRadius: 12,
+      overflow: "hidden",
+      border: "1px solid rgba(255,255,255,0.08)",
+      background: "var(--code-bg)",
+      boxShadow: "var(--shadow-md)",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "8px 14px",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        background: "rgba(255,255,255,0.03)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ display: "flex", gap: 5 }}>
+            {["#ff5f57","#febc2e","#28c840"].map((c) => (
+              <span key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, display: "inline-block" }} />
+            ))}
           </span>
           <select
             value={block.lang ?? "js"}
             onChange={(e) => h.onCodeLang(block.id, e.target.value)}
-            className="cursor-pointer bg-transparent font-mono text-[10.5px] uppercase tracking-[0.14em] text-white/40 outline-none transition-colors hover:text-white/70"
+            style={{
+              background: "transparent",
+              border: "none", outline: "none",
+              fontFamily: "var(--font-mono)",
+              fontSize: 11, fontWeight: 600,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.4)",
+              cursor: "pointer",
+            }}
           >
-            {LANGS.map((l) => (
-              <option key={l} value={l} className="bg-ink text-white/80">{l}</option>
-            ))}
+            {LANGS.map((l) => <option key={l} value={l} style={{ background: "#0f172a" }}>{l}</option>)}
           </select>
         </div>
         <button
-          type="button"
           onClick={() => {
             navigator.clipboard?.writeText(block.html).then(
-              () => h.onToast("Kode disalin ke clipboard"),
-              () => h.onToast("Gagal menyalin kode")
+              () => h.onToast("✅ Kode disalin"),
+              () => h.onToast("❌ Gagal menyalin")
             );
           }}
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-white/40 transition hover:bg-white/10 hover:text-white/80 active:scale-95"
+          style={{
+            background: "rgba(255,255,255,0.07)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 6, padding: "3px 9px",
+            color: "rgba(255,255,255,0.5)",
+            fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 500,
+            cursor: "pointer", transition: "all 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "#fff"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
         >
-          <IcCopy width={12} height={12} /> Salin
+          Salin
         </button>
       </div>
       <textarea
@@ -91,11 +198,194 @@ function CodeBlock({ block, h }: { block: Block; h: BlockHandlers }) {
         rows={lines}
         spellCheck={false}
         placeholder="// tulis kode di sini…"
-        className="block w-full resize-none bg-transparent p-3.5 font-mono text-[13px] leading-relaxed text-[#d8e3dd] outline-none placeholder:text-white/25"
+        style={{
+          display: "block", width: "100%",
+          background: "transparent", border: "none", outline: "none",
+          resize: "none",
+          fontFamily: "var(--font-mono)", fontSize: 13,
+          lineHeight: 1.65, color: "var(--code-text)",
+          padding: "14px 16px",
+        }}
       />
     </div>
   );
 }
+
+// ─── Toggle Block ─────────────────────────────────────────────
+
+function ToggleBlock({ block, h, editableEl }: { block: Block; h: BlockHandlers; editableEl: React.ReactNode }) {
+  const open = (block.props as { open?: boolean })?.open ?? false;
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+        <button
+          onClick={() => h.onPropsChange(block.id, { ...(block.props ?? {}), open: !open })}
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: "var(--text-tertiary)", padding: "3px 2px",
+            transform: open ? "rotate(90deg)" : "rotate(0deg)",
+            transition: "transform 0.15s",
+            flexShrink: 0,
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          ▶
+        </button>
+        <div style={{ flex: 1 }}>{editableEl}</div>
+      </div>
+    </div>
+  );
+}
+
+function ImageBlock({ block, h }: { block: Block; h: BlockHandlers }) {
+  const savedUrl = (block.props as { url?: string })?.url ?? "";
+  const [draftUrl, setDraftUrl] = useState(savedUrl);
+
+  if (savedUrl) {
+    return (
+      <figure style={{ margin: "8px 0" }}>
+        <img
+          src={savedUrl}
+          alt={(block.props as { caption?: string })?.caption ?? ""}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          style={{ maxWidth: "100%", borderRadius: 12, display: "block", boxShadow: "var(--shadow-sm)" }}
+        />
+        <input
+          value={(block.props as { caption?: string })?.caption ?? ""}
+          onChange={(e) => h.onPropsChange(block.id, { ...(block.props ?? {}), caption: e.target.value })}
+          placeholder="Tambah keterangan gambar…"
+          aria-label="Keterangan gambar"
+          style={{
+            width: "100%", marginTop: 8, background: "transparent", border: "none", outline: "none",
+            fontSize: 12.5, textAlign: "center", color: "var(--text-tertiary)",
+            fontFamily: "var(--font-sans)", fontStyle: "italic",
+          }}
+        />
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={() => { setDraftUrl(savedUrl); h.onPropsChange(block.id, { ...(block.props ?? {}), url: "" }); }}
+          style={{ display: "block", margin: "4px auto 0", fontSize: 11 }}
+        >
+          Ganti gambar
+        </button>
+      </figure>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const next = draftUrl.trim();
+        if (!isSafeHttpUrl(next)) {
+          h.onToast("URL gambar harus diawali http:// atau https://");
+          return;
+        }
+        h.onPropsChange(block.id, { ...(block.props ?? {}), url: next });
+      }}
+      style={{
+        margin: "8px 0", border: "1.5px dashed var(--border-strong)", borderRadius: 12,
+        padding: 18, background: "var(--bg-secondary)",
+      }}
+    >
+      <div style={{ fontSize: 22, marginBottom: 8 }}>🖼️</div>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 650, color: "var(--text-primary)", marginBottom: 8 }}>
+        Tambahkan gambar dari URL aman
+      </label>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          value={draftUrl}
+          onChange={(e) => setDraftUrl(e.target.value)}
+          placeholder="https://contoh.com/gambar.jpg"
+          aria-label="URL gambar"
+          className="input"
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <button type="submit" className="btn btn-primary btn-sm">Tambahkan</button>
+      </div>
+      <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--text-tertiary)" }}>
+        Hanya URL HTTP/HTTPS yang diterima.
+      </p>
+    </form>
+  );
+}
+
+// ─── Block Context Menu ──────────────────────────────────────
+
+function BlockMenu({ blockId, onClose, h }: {
+  blockId: string;
+  onClose: () => void;
+  h: BlockHandlers;
+}) {
+  const items = [
+    { label: "⬆ Geser naik",   action: () => h.onMove(blockId, "up") },
+    { label: "⬇ Geser turun",  action: () => h.onMove(blockId, "down") },
+    { label: "⧉  Duplikat",     action: () => h.onDuplicate(blockId) },
+    { label: "📋 Salin sebagai teks", action: () => {
+      const el = document.querySelector(`[data-block-id="${blockId}"] .editable`) as HTMLElement | null;
+      navigator.clipboard?.writeText(el?.textContent ?? "").then(() => h.onToast("✅ Teks disalin"));
+    }},
+  ];
+
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={onClose} />
+      <div
+        style={{
+          position: "absolute", left: "calc(100% + 6px)", top: 0,
+          zIndex: 300, minWidth: 180,
+          background: "var(--surface-overlay)",
+          border: "1px solid var(--border)",
+          borderRadius: 12,
+          padding: 5,
+          boxShadow: "var(--shadow-xl)",
+          animation: "pop-in 0.15s var(--ease-spring) both",
+        }}
+      >
+        {items.map((item) => (
+          <button
+            key={item.label}
+            onClick={() => { item.action(); onClose(); }}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              width: "100%", padding: "8px 10px",
+              border: "none", borderRadius: 7,
+              background: "transparent", cursor: "pointer",
+              fontFamily: "var(--font-sans)", fontSize: 13, fontWeight: 500,
+              color: "var(--text-primary)", textAlign: "left",
+              transition: "background 0.12s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            {item.label}
+          </button>
+        ))}
+        <div style={{ height: 1, background: "var(--border)", margin: "4px 6px" }} />
+        <button
+          onClick={() => { h.onDelete(blockId); onClose(); }}
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            width: "100%", padding: "8px 10px",
+            border: "none", borderRadius: 7,
+            background: "transparent", cursor: "pointer",
+            fontFamily: "var(--font-sans)", fontSize: 13, fontWeight: 500,
+            color: "var(--danger)", textAlign: "left",
+            transition: "background 0.12s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--danger-soft)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          🗑 Hapus blok
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ─── Main BlockView ──────────────────────────────────────────
 
 export default function BlockView({
   block: b, i, num, h, slash,
@@ -106,10 +396,53 @@ export default function BlockView({
   h: BlockHandlers;
   slash?: SlashState | null;
 }) {
-  const [menu, setMenu] = useState(false);
-  const editable = !["code", "formula", "table", "divider"].includes(b.type);
-  const focusReq = h.focusReq && h.focusReq.id === b.id ? h.focusReq : null;
+  const [menu, setMenu]       = useState(false);
+  const [toolbar, setToolbar] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
+  const editable = !["code","formula","table","divider","image","embed"].includes(b.type);
+  const focusReq = h.focusReq?.id === b.id ? h.focusReq : null;
+
+  // ── DnD sortable ──────────────────────────────────────────
+  const {
+    attributes, listeners, setNodeRef,
+    transform, transition, isDragging,
+  } = useSortable({ id: b.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    position: "relative" as const,
+  };
+
+  // ── Rich text formatting ──────────────────────────────────
+  const handleFormat = (cmd: string, val?: string) => {
+    if (cmd === "_code") {
+      const selected = window.getSelection()?.toString() ?? "kode";
+      const safe = selected.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      document.execCommand("insertHTML", false, `<code>${safe}</code>`);
+    } else if (cmd === "_link") {
+      const url = prompt("URL tautan:");
+      if (url && isSafeHttpUrl(url)) document.execCommand("createLink", false, url);
+      else if (url) h.onToast("URL harus diawali http:// atau https://");
+    } else {
+      document.execCommand(cmd, false, val);
+    }
+    setToolbar(false);
+  };
+
+  // ── Selection listener → show toolbar ────────────────────
+  const handleSelect = () => {
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().length > 0) {
+      setToolbar(true);
+    } else {
+      setToolbar(false);
+    }
+  };
+
+  // ── Editable element ──────────────────────────────────────
   const editableEl = editable && (
     <Editable
       html={b.html}
@@ -121,78 +454,149 @@ export default function BlockView({
       onBackspaceStart={() => h.onBackspaceStart(b.id)}
       onArrowNav={(dir) => h.onArrow(b.id, dir)}
       onKeyDown={(e) => h.onSlashKey(b.id, e)}
+      onSelect={handleSelect}
+      onBlur={() => setTimeout(() => setToolbar(false), 200)}
     />
   );
 
+  // ── Content by type ───────────────────────────────────────
   const content = (() => {
     switch (b.type) {
       case "h1":
-        return <div className="pt-4 pb-1 font-display text-[1.85rem] font-bold leading-tight tracking-tight text-ink">{editableEl}</div>;
+        return (
+          <div style={{ paddingTop: 20, paddingBottom: 4, position: "relative" }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
+            <div style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "2rem", fontWeight: 800,
+              lineHeight: 1.2, color: "var(--text-primary)",
+            }}>{editableEl}</div>
+          </div>
+        );
       case "h2":
         return (
-          <div className="flex items-baseline gap-2.5 pt-4 pb-0.5">
-            <span className="h-[7px] w-[7px] shrink-0 translate-y-[-2px] rounded-[2.5px] bg-pine" />
-            <div className="font-display text-[1.4rem] font-bold leading-snug tracking-tight text-ink">{editableEl}</div>
+          <div style={{ paddingTop: 16, paddingBottom: 2, display: "flex", alignItems: "baseline", gap: 10, position: "relative" }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
+            <span style={{
+              width: 7, height: 7, flexShrink: 0,
+              borderRadius: 2, background: "var(--accent)",
+              transform: "translateY(-1px)", display: "inline-block",
+            }} />
+            <div style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "1.45rem", fontWeight: 700, lineHeight: 1.25,
+              color: "var(--text-primary)",
+            }}>{editableEl}</div>
           </div>
         );
       case "h3":
-        return <div className="pt-2.5 font-display text-[1.13rem] font-semibold text-ink">{editableEl}</div>;
+        return (
+          <div style={{ paddingTop: 10, position: "relative" }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
+            <div style={{
+              fontFamily: "var(--font-display)",
+              fontSize: "1.15rem", fontWeight: 600,
+              color: "var(--text-primary)",
+            }}>{editableEl}</div>
+          </div>
+        );
       case "todo":
         return (
-          <div className="flex items-start gap-2.5 py-[3px]">
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "3px 0", position: "relative" }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
             <button
-              type="button"
               onClick={() => h.onToggle(b.id)}
-              aria-label="centang tugas"
-              className={`mt-[3px] grid h-[17px] w-[17px] shrink-0 place-items-center rounded-[5px] border-[1.5px] transition-all duration-150 active:scale-90 ${
-                b.checked ? "border-pine bg-pine text-white" : "border-faint bg-transparent hover:border-pine"
-              }`}
+              style={{
+                marginTop: 3, flexShrink: 0,
+                width: 17, height: 17,
+                borderRadius: 5,
+                border: `1.5px solid ${b.checked ? "var(--accent)" : "var(--border-strong)"}`,
+                background: b.checked ? "var(--accent)" : "transparent",
+                cursor: "pointer",
+                display: "grid", placeItems: "center",
+                transition: "all 0.15s",
+              }}
             >
               {b.checked && (
-                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="m5 13 4.5 4.5L19 7" />
                 </svg>
               )}
             </button>
-            <div className={`min-w-0 flex-1 text-[15px] leading-relaxed transition-all duration-200 ${b.checked ? "text-faint line-through" : "text-body"}`}>
+            <div style={{
+              flex: 1, fontSize: 15, lineHeight: 1.65,
+              color: b.checked ? "var(--text-tertiary)" : "var(--text-primary)",
+              textDecoration: b.checked ? "line-through" : "none",
+              transition: "all 0.2s",
+            }}>
               {editableEl}
             </div>
           </div>
         );
       case "bullet":
         return (
-          <div className="flex items-start gap-2.5 py-[3px]">
-            <svg viewBox="0 0 8 8" width="7" height="7" className="mt-[9px] shrink-0">
-              <circle cx="4" cy="4" r="3.4" className="fill-pine" />
-            </svg>
-            <div className="min-w-0 flex-1 text-[15px] leading-relaxed text-body">{editableEl}</div>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "2px 0", position: "relative" }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
+            <span style={{
+              marginTop: 9, width: 6, height: 6, borderRadius: "50%",
+              background: "var(--accent)", flexShrink: 0, display: "inline-block",
+            }} />
+            <div style={{ flex: 1, fontSize: 15, lineHeight: 1.65, color: "var(--text-primary)" }}>{editableEl}</div>
           </div>
         );
       case "numbered":
         return (
-          <div className="flex items-start gap-2.5 py-[3px]">
-            <span className="mt-[2px] min-w-[1.3em] shrink-0 text-right font-mono text-[13px] font-semibold text-pine-deep">{num}.</span>
-            <div className="min-w-0 flex-1 text-[15px] leading-relaxed text-body">{editableEl}</div>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "2px 0", position: "relative" }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
+            <span style={{
+              marginTop: 2, minWidth: "1.4em", textAlign: "right",
+              fontFamily: "var(--font-mono)", fontSize: 13,
+              fontWeight: 600, color: "var(--accent)", flexShrink: 0,
+            }}>
+              {num}.
+            </span>
+            <div style={{ flex: 1, fontSize: 15, lineHeight: 1.65, color: "var(--text-primary)" }}>{editableEl}</div>
           </div>
         );
       case "quote":
         return (
-          <div className="my-1 border-l-[3px] border-ink py-1 pl-4 text-[15.5px] italic leading-relaxed text-ink-3">
-            {editableEl}
+          <div style={{
+            margin: "4px 0",
+            borderLeft: "3px solid var(--accent)",
+            paddingLeft: 16, paddingTop: 4, paddingBottom: 4,
+            position: "relative",
+          }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
+            <div style={{
+              fontSize: 15.5, fontStyle: "italic",
+              lineHeight: 1.65, color: "var(--text-secondary)",
+            }}>{editableEl}</div>
           </div>
         );
       case "callout":
         return (
-          <div className="my-1 flex items-start gap-3 rounded-xl border border-honey/50 bg-honey-soft px-3.5 py-3">
+          <div style={{
+            margin: "4px 0",
+            display: "flex", alignItems: "flex-start", gap: 12,
+            background: "var(--callout-bg)",
+            border: `1px solid ${b.checked ? "var(--border)" : "var(--callout-border)"}`,
+            borderRadius: 12, padding: "12px 14px",
+            position: "relative",
+          }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
             <button
-              type="button"
               onClick={() => h.onCalloutIcon(b.id)}
-              title="Ganti ikon"
-              className="mt-[-2px] text-[19px] leading-none transition-transform hover:scale-125 active:scale-95"
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: 19, lineHeight: 1, padding: 0, marginTop: -1,
+                transition: "transform 0.15s", flexShrink: 0,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
             >
               {b.icon ?? "💡"}
             </button>
-            <div className="min-w-0 flex-1 text-[14.5px] leading-relaxed text-body">{editableEl}</div>
+            <div style={{ flex: 1, fontSize: 14.5, lineHeight: 1.65, color: "var(--text-primary)" }}>{editableEl}</div>
           </div>
         );
       case "code":
@@ -203,79 +607,135 @@ export default function BlockView({
         return <TableBlock block={b} onChange={(rows) => h.onRowsChange(b.id, rows)} />;
       case "divider":
         return (
-          <div className="py-2.5">
-            <div className="h-[2px] rounded-full bg-gradient-to-r from-line via-line to-transparent transition-colors hover:from-pine/50" />
+          <div style={{ padding: "10px 0" }}>
+            <div style={{
+              height: 2, borderRadius: 99,
+              background: "linear-gradient(to right, var(--accent), transparent)",
+              opacity: 0.35,
+            }} />
           </div>
         );
+      case "image": {
+        return <ImageBlock block={b} h={h} />;
+      }
+      case "toggle":
+        return <ToggleBlock block={b} h={h} editableEl={editableEl} />;
       default:
-        return <div className="py-[3px] text-[15px] leading-relaxed text-body">{editableEl}</div>;
+        return (
+          <div style={{ padding: "2px 0", position: "relative" }}>
+            {toolbar && <RichToolbar onFormat={handleFormat} />}
+            <div style={{ fontSize: 15, lineHeight: 1.65, color: "var(--text-primary)" }}>{editableEl}</div>
+          </div>
+        );
     }
   })();
 
   return (
-    <div className="group relative animate-rise" style={{ animationDelay: `${Math.min(i * 28, 340)}ms` }}>
-      {/* kontrol kiri */}
-      <div className="absolute -left-11 top-[5px] hidden items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 md:flex">
+    <div
+      ref={(node) => { setNodeRef(node); (wrapRef as React.MutableRefObject<HTMLDivElement | null>).current = node; }}
+      data-block-id={b.id}
+      style={{
+        ...style,
+        animation: `rise ${Math.min(i * 30, 360)}ms var(--ease-out) both`,
+      }}
+      className="group"
+    >
+      {/* ── Left controls (plus + drag handle) ── */}
+      <div
+        style={{
+          position: "absolute",
+          left: -44,
+          top: 5,
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          opacity: 0,
+          transition: "opacity 0.15s",
+          pointerEvents: "none",
+        }}
+        className="block-left-controls"
+      >
+        {/* + button */}
         <button
-          type="button"
-          title="Tambah blok"
           onClick={() => h.onPlus(b.id)}
-          className="grid h-6 w-6 place-items-center rounded-md text-faint transition hover:bg-line/70 hover:text-ink active:scale-90"
+          title="Tambah blok"
+          style={{
+            width: 24, height: 24, borderRadius: 6,
+            background: "transparent", border: "none",
+            cursor: "pointer", display: "grid", placeItems: "center",
+            color: "var(--text-tertiary)", transition: "all 0.12s",
+            pointerEvents: "all",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-tertiary)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-tertiary)"; }}
         >
-          <IcPlus width={14} height={14} />
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
         </button>
+
+        {/* Drag handle / context menu trigger */}
         <button
-          type="button"
+          {...attributes}
+          {...listeners}
+          onClick={(e) => { e.stopPropagation(); setMenu((m) => !m); }}
           title="Atur blok"
-          onClick={() => setMenu((m) => !m)}
-          className={`grid h-6 w-6 cursor-grab place-items-center rounded-md transition active:scale-90 ${menu ? "bg-line/80 text-ink" : "text-faint hover:bg-line/70 hover:text-ink"}`}
+          style={{
+            width: 24, height: 24, borderRadius: 6,
+            background: menu ? "var(--bg-tertiary)" : "transparent",
+            border: "none",
+            cursor: "grab",
+            display: "grid", placeItems: "center",
+            color: menu ? "var(--text-primary)" : "var(--text-tertiary)",
+            transition: "all 0.12s",
+            pointerEvents: "all",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-tertiary)"; e.currentTarget.style.color = "var(--text-primary)"; }}
+          onMouseLeave={(e) => {
+            if (!menu) {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "var(--text-tertiary)";
+            }
+          }}
         >
-          <IcGrip width={14} height={14} />
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="6"  r="1.8" /><circle cx="15" cy="6"  r="1.8" />
+            <circle cx="9" cy="12" r="1.8" /><circle cx="15" cy="12" r="1.8" />
+            <circle cx="9" cy="18" r="1.8" /><circle cx="15" cy="18" r="1.8" />
+          </svg>
         </button>
+
+        {menu && (
+          <BlockMenu blockId={b.id} onClose={() => setMenu(false)} h={h} />
+        )}
       </div>
 
-      {/* popover aksi blok */}
-      {menu && (
-        <>
-          <div className="fixed inset-0 z-20" onClick={() => setMenu(false)} />
-          <div className="absolute -left-11 top-8 z-30 w-44 animate-pop rounded-xl border border-line bg-card p-1.5 shadow-[0_14px_36px_-10px_rgba(21,24,29,0.25)]">
-            {(
-              [
-                ["up", "Geser naik", <IcArrowUp key="u" width={13} height={13} />],
-                ["down", "Geser turun", <IcArrowDown key="d" width={13} height={13} />],
-                ["dup", "Duplikat", <IcCopy key="c" width={13} height={13} />],
-              ] as const
-            ).map(([act, label, icon]) => (
-              <button
-                key={act}
-                type="button"
-                onClick={() => {
-                  setMenu(false);
-                  if (act === "up") h.onMove(b.id, "up");
-                  if (act === "down") h.onMove(b.id, "down");
-                  if (act === "dup") h.onDuplicate(b.id);
-                }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-medium text-body transition hover:bg-paper active:scale-[0.98]"
-              >
-                <span className="text-fade">{icon}</span> {label}
-              </button>
-            ))}
-            <div className="mx-1.5 my-1 h-px bg-line/80" />
-            <button
-              type="button"
-              onClick={() => { setMenu(false); h.onDelete(b.id); }}
-              className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-medium text-danger transition hover:bg-danger-soft active:scale-[0.98]"
-            >
-              <IcTrash width={13} height={13} /> Hapus
-            </button>
-          </div>
-        </>
-      )}
-
-      <div className="relative">
+      {/* ── Block content ── */}
+      <div
+        onMouseEnter={() => {
+          const el = wrapRef.current?.querySelector(".block-left-controls") as HTMLElement | null;
+          if (el) el.style.opacity = "1";
+        }}
+        onMouseLeave={() => {
+          const el = wrapRef.current?.querySelector(".block-left-controls") as HTMLElement | null;
+          if (el) el.style.opacity = "0";
+        }}
+      >
         {content}
-        {slash && <SlashMenu items={slash.items} idx={slash.idx} onIdx={slash.onIdx} onPick={slash.onPick} query={slash.query} />}
       </div>
+
+      {/* ── Slash menu ── */}
+      {slash && (
+        <div style={{ position: "relative" }}>
+          <SlashMenu
+            query={slash.query}
+            idx={slash.idx}
+            items={slash.items}
+            onIdx={slash.onIdx}
+            onPick={slash.onPick}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,114 +1,91 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { Block, BlockType, FocusReq, Page, SlashDef, Toast } from "./types";
 import {
-  CALLOUT_ICONS, PAGE_ICONS, STORAGE_KEY, countWords, escapeHtml, stripHtml, timeAgo, uid,
-} from "./lib/util";
-import { makeSeed } from "./data/seed";
+  DndContext, DragEndEvent, DragOverlay, DragStartEvent,
+  PointerSensor, closestCenter, useSensor, useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext, verticalListSortingStrategy, arrayMove,
+} from "@dnd-kit/sortable";
+
+import type { Block, BlockType, FocusReq, Profile, SlashDef, Toast, Workspace } from "./types";
+import { usePages, mkBlock } from "./hooks/usePages";
+import { stripHtml, countWords, timeAgo, PAGE_ICONS } from "./lib/util";
+
 import Sidebar from "./components/Sidebar";
 import BlockView from "./components/BlockView";
-import type { BlockHandlers } from "./components/BlockView";
-import PresentMode from "./components/PresentMode";
-import { IcBraces, IcCheck, IcLogo, IcMenu, IcPresent } from "./components/icons";
+import type { BlockHandlers, SlashState } from "./components/BlockView";
+import CollabCursors from "./components/CollabCursors";
+import ExportMenu from "./components/ExportMenu";
+import { IcPresent, IcDownload, IcShare } from "./components/icons";
+
+const restrictToVerticalAxis = ({ transform }: { transform: { x: number; y: number; scaleX: number; scaleY: number } }) => ({
+  ...transform,
+  x: 0,
+});
+
+const PresentMode = lazy(() => import("./components/PresentMode"));
+
+// ─── Slash definitions ────────────────────────────────────────
 
 const SLASH_DEFS: SlashDef[] = [
-  { type: "text", label: "Teks", desc: "Paragraf biasa", kw: "text paragraph paragraf tulisan tulis" },
-  { type: "h1", label: "Judul 1", desc: "Judul bagian paling besar", kw: "heading header judul besar title h1" },
-  { type: "h2", label: "Judul 2", desc: "Judul bagian sedang", kw: "heading subjudul judul sedang h2" },
-  { type: "h3", label: "Judul 3", desc: "Judul bagian kecil", kw: "heading judul kecil h3" },
-  { type: "todo", label: "Daftar Tugas", desc: "Tugas dengan kotak centang", kw: "todo checklist tugas centang checkbox" },
-  { type: "bullet", label: "Daftar Poin", desc: "Daftar dengan poin", kw: "bullet list poin daftar" },
-  { type: "numbered", label: "Daftar Nomor", desc: "Daftar bernomor urut", kw: "numbered nomor angka urutan list" },
-  { type: "quote", label: "Kutipan", desc: "Kutipan atau catatan pinggir", kw: "quote kutipan sitasi blockquote" },
-  { type: "callout", label: "Sorotan", desc: "Kotak info berikon", kw: "callout highlight sorotan info penting" },
-  { type: "formula", label: "Rumus", desc: "Hitung matematika, hasil langsung", kw: "formula rumus kalkulator hitung math matematika" },
-  { type: "table", label: "Tabel", desc: "Baris & kolom yang bisa diedit", kw: "table tabel grid kolom baris spreadsheet" },
-  { type: "code", label: "Kode", desc: "Potongan kode program", kw: "code kode snippet program script" },
-  { type: "divider", label: "Garis Pembatas", desc: "Pemisah antar bagian", kw: "divider garis pemisah pembatas hr" },
+  { type: "text",     label: "Teks",          desc: "Paragraf biasa",               kw: "text paragraph tulisan", group: "Teks" },
+  { type: "h1",       label: "Judul 1",       desc: "Judul utama paling besar",     kw: "heading h1 judul besar", group: "Judul" },
+  { type: "h2",       label: "Judul 2",       desc: "Judul seksi sedang",           kw: "heading h2 judul sedang", group: "Judul" },
+  { type: "h3",       label: "Judul 3",       desc: "Judul seksi kecil",            kw: "heading h3 judul kecil", group: "Judul" },
+  { type: "todo",     label: "Daftar Tugas",  desc: "Tugas dengan kotak centang",   kw: "todo checklist tugas centang", group: "List" },
+  { type: "bullet",   label: "Poin",          desc: "Daftar dengan poin bulat",     kw: "bullet list poin daftar", group: "List" },
+  { type: "numbered", label: "Bernomor",      desc: "Daftar bernomor urut",         kw: "numbered nomor urutan", group: "List" },
+  { type: "quote",    label: "Kutipan",       desc: "Kutipan atau blockquote",      kw: "quote kutipan blockquote", group: "Teks" },
+  { type: "callout",  label: "Sorotan",       desc: "Kotak info berikon",           kw: "callout highlight sorotan info", group: "Teks" },
+  { type: "toggle",   label: "Toggle",        desc: "Konten yang bisa dilipat",     kw: "toggle collapse lipat", group: "Teks" },
+  { type: "divider",  label: "Pemisah",       desc: "Garis pemisah antar bagian",   kw: "divider garis pemisah hr", group: "Teks" },
+  { type: "formula",  label: "Rumus",         desc: "Kalkulator matematika",        kw: "formula rumus hitung math", group: "Data" },
+  { type: "table",    label: "Tabel",         desc: "Baris & kolom yang bisa diedit", kw: "table tabel grid spreadsheet", group: "Data" },
+  { type: "code",     label: "Kode",          desc: "Potongan kode program",        kw: "code kode snippet program", group: "Data" },
+  { type: "image",    label: "Gambar",        desc: "Tambah gambar dari URL",       kw: "image gambar foto url", group: "Media" },
 ];
 
-const TEXT_LIKE: BlockType[] = ["text", "todo", "bullet", "numbered", "quote", "callout", "h1", "h2", "h3"];
+const TEXT_LIKE: BlockType[] = ["text","todo","bullet","numbered","quote","callout","h1","h2","h3","toggle"];
 
-function mkBlock(type: BlockType): Block {
-  return {
-    id: uid(),
-    type,
-    html: "",
-    v: 0,
-    ...(type === "todo" ? { checked: false } : {}),
-    ...(type === "table" ? { rows: [["", "", ""], ["", "", ""], ["", "", ""]] } : {}),
-    ...(type === "callout" ? { icon: "💡" } : {}),
-    ...(type === "code" ? { lang: "js" } : {}),
-  };
+interface AppProps {
+  profile: Profile;
+  workspace: Workspace;
+  theme: "light" | "dark";
+  toggleTheme: () => void;
+  onSignOut: () => void;
 }
 
-function loadState(): { pages: Page[]; activeId: string | null } {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const d = JSON.parse(raw) as { pages?: Page[]; activeId?: string };
-      if (Array.isArray(d.pages))
-        return { pages: d.pages, activeId: d.activeId ?? d.pages[0]?.id ?? null };
-    }
-  } catch {
-    /* abaikan data rusak */
-  }
-  const seed = makeSeed();
-  return { pages: seed.pages, activeId: seed.activeId };
-}
+export default function App({ profile, workspace, theme, toggleTheme, onSignOut }: AppProps) {
+  const {
+    pages, activePage, activePageId, setActivePageId, saveStatus, loading,
+    createPage, deletePage, updatePageMeta,
+    mutateBlocks, convertBlock, insertBlock, updateBlock, removeBlock,
+    duplicateBlock, moveBlock, reorderBlocksLocal,
+    splitBlock, mergeBlockWithPrev, applyMarkdownShortcut, cycleCalloutIcon,
+  } = usePages(profile, workspace);
 
-export default function App() {
-  const [boot] = useState(loadState);
-  const [pages, setPages] = useState<Page[]>(boot.pages);
-  const [activeId, setActiveId] = useState<string | null>(boot.activeId);
-  const [focus, setFocus] = useState<FocusReq | null>(null);
-  const [slash, setSlash] = useState<{ blockId: string; query: string } | null>(null);
-  const [slashIdx, setSlashIdx] = useState(0);
-  const [saveState, setSaveState] = useState<"saved" | "saving">("saved");
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  // ── Local UI state ─────────────────────────────────────────
+  const [focus, setFocus]         = useState<FocusReq | null>(null);
+  const [slash, setSlash]         = useState<{ blockId: string; query: string } | null>(null);
+  const [slashIdx, setSlashIdx]   = useState(0);
   const [presenting, setPresenting] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [iconPicker, setIconPicker] = useState(false);
-  const [titleTick, setTitleTick] = useState(0);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [toasts, setToasts]       = useState<Toast[]>([]);
+  const [dragActive, setDragActive] = useState<string | null>(null);
+
   const tick = useRef(1);
   const dismissed = useRef<{ id: string; q: string } | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
-  const activePage = pages.find((p) => p.id === activeId) ?? null;
+  // ── DnD sensors ────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
 
-  /* ---------- efek global ---------- */
-
-  useEffect(() => {
-    setSaveState("saving");
-    const t = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ pages, activeId }));
-      } catch {
-        /* penyimpanan penuh */
-      }
-      setSaveState("saved");
-    }, 550);
-    return () => clearTimeout(t);
-  }, [pages, activeId]);
-
-  useEffect(() => {
-    if (!activeId || !pages.some((p) => p.id === activeId))
-      setActiveId(pages[0]?.id ?? null);
-  }, [pages, activeId]);
-
-  useEffect(() => {
-    document.body.style.overflow = presenting ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [presenting]);
-
-  useEffect(() => {
-    if (titleTick) titleRef.current?.focus();
-  }, [titleTick]);
-
-  /* ---------- util ---------- */
-
+  // ── Helpers ────────────────────────────────────────────────
   const toast = (msg: string) => {
     const id = Date.now() + Math.random();
     setToasts((t) => [...t, { id, msg }]);
@@ -118,127 +95,52 @@ export default function App() {
   const focusTo = (id: string, pos: number) =>
     setFocus({ id, pos, tick: ++tick.current });
 
-  const mutatePage = (pid: string, fn: (p: Page) => Page) =>
-    setPages((ps) => ps.map((p) => (p.id === pid ? { ...fn(p), updatedAt: Date.now() } : p)));
-
-  const mutateBlocks = (pid: string, fn: (bs: Block[]) => Block[]) =>
-    mutatePage(pid, (p) => ({ ...p, blocks: fn(p.blocks) }));
-
-  /* ---------- operasi blok ---------- */
-
-  const convertBlock = (id: string, type: BlockType) => {
-    if (!activePage) return;
-    mutateBlocks(activePage.id, (bs) =>
-      bs.map((b) => (b.id === id ? { ...mkBlock(type), id: b.id, v: b.v + 1 } : b))
-    );
-    setSlash(null);
-    dismissed.current = null;
-    focusTo(id, 0);
-  };
-
-  const applySlash = (id: string, def: SlashDef) => {
-    if (!activePage) return;
-    const blk = activePage.blocks.find((b) => b.id === id);
-    const plain = blk ? stripHtml(blk.html) : "";
-    const isSlashOnly = plain.trim() === "" || plain.trim().startsWith("/");
-    if (def.type !== "divider" && !isSlashOnly) {
-      // blok berisi konten → sisipkan blok baru di bawahnya, jangan timpa
-      const nb = mkBlock(def.type);
-      mutateBlocks(activePage.id, (bs) => {
-        const i = bs.findIndex((b) => b.id === id);
-        if (i < 0) return bs;
-        const copy = [...bs];
-        copy.splice(i + 1, 0, nb);
-        return copy;
-      });
-      setSlash(null);
-      if (TEXT_LIKE.includes(def.type)) focusTo(nb.id, 0);
-      return;
-    }
-    if (def.type === "divider") {
-      const nb = mkBlock("divider");
-      mutateBlocks(activePage.id, (bs) => {
-        const i = bs.findIndex((b) => b.id === id);
-        if (i < 0) return bs;
-        const copy = [...bs];
-        copy[i] = { ...copy[i], html: "", v: copy[i].v + 1 };
-        copy.splice(i + 1, 0, nb);
-        return copy;
-      });
-      setSlash(null);
-      focusTo(id, 0);
-    } else {
-      convertBlock(id, def.type);
-    }
-  };
-
-  const onBlockChange = (id: string, html: string, plain: string) => {
-    if (!activePage) return;
-    const blk = activePage.blocks.find((b) => b.id === id);
-    if (!blk) return;
-    mutateBlocks(activePage.id, (bs) => bs.map((b) => (b.id === id ? { ...b, html } : b)));
-
-    if (!TEXT_LIKE.includes(blk.type)) {
-      setSlash((s) => (s?.blockId === id ? null : s));
-      return;
-    }
-
-    if (plain.startsWith("/")) {
-      const q = plain.slice(1).toLowerCase().trim();
-      const wasDismissed = dismissed.current?.id === id && dismissed.current.q === q;
-      if (!wasDismissed) {
-        setSlash({ blockId: id, query: q });
-        setSlashIdx(0);
-      }
-      return;
-    }
-    setSlash((s) => (s?.blockId === id ? null : s));
-
-    if (blk.type === "text") {
-      const shortcuts: [RegExp, BlockType][] = [
-        [/^#\s$/, "h1"],
-        [/^##\s$/, "h2"],
-        [/^###\s$/, "h3"],
-        [/^[-*]\s$/, "bullet"],
-        [/^1\.\s$/, "numbered"],
-        [/^\[\s?\]\s$/, "todo"],
-        [/^>\s$/, "quote"],
-      ];
-      for (const [re, t] of shortcuts) {
-        if (re.test(plain)) {
-          convertBlock(id, t);
-          return;
-        }
-      }
-      if (/^```\s*$/.test(plain)) {
-        convertBlock(id, "code");
-        return;
-      }
-      if (/^-{3,}\s*$/.test(plain)) {
-        const nb = mkBlock("text");
-        mutateBlocks(activePage.id, (bs) => {
-          const i = bs.findIndex((b) => b.id === id);
-          if (i < 0) return bs;
-          const copy = [...bs];
-          copy[i] = { ...copy[i], type: "divider", html: "", v: copy[i].v + 1 };
-          copy.splice(i + 1, 0, nb);
-          return copy;
-        });
-        focusTo(nb.id, 0);
-      }
-    }
-  };
-
+  // ── Slash menu items ───────────────────────────────────────
   const slashItems = useMemo(() => {
     if (!slash) return [] as SlashDef[];
-    const q = slash.query;
+    const q = slash.query.toLowerCase();
     return SLASH_DEFS.filter(
       (d) => !q || d.label.toLowerCase().includes(q) || d.kw.toLowerCase().includes(q)
     );
   }, [slash]);
 
-  const onSlashKey = (id: string, e: ReactKeyboardEvent<HTMLDivElement>): boolean => {
-    if (!slash || slash.blockId !== id) return false;
+  // ── Apply slash pick ───────────────────────────────────────
+  const applySlash = (blockId: string, def: SlashDef) => {
+    if (!activePage) return;
+    const blk = activePage.blocks.find((b) => b.id === blockId);
+    const plain = blk ? stripHtml(blk.html) : "";
+    const isSlashOnly = plain.trim() === "" || /^\//.test(plain.trim());
+
+    if (def.type === "divider") {
+      const nb = mkBlock("text", activePage.id, (blk?.sort_order ?? 0) + 500);
+      mutateBlocks(activePage.id, (bs) => {
+        const i = bs.findIndex((b) => b.id === blockId);
+        if (i < 0) return bs;
+        const copy = [...bs];
+        copy[i] = { ...copy[i], type: "divider", html: "", v: copy[i].v + 1 };
+        copy.splice(i + 1, 0, nb);
+        return copy;
+      });
+      setSlash(null); focusTo(nb.id, 0);
+      return;
+    }
+
+    if (!isSlashOnly) {
+      const nb = insertBlock(activePage.id, blockId, def.type);
+      setSlash(null);
+      if (TEXT_LIKE.includes(def.type)) focusTo(nb.id, 0);
+      return;
+    }
+
+    convertBlock(activePage.id, blockId, def.type);
+    setSlash(null);
+    dismissed.current = null;
+    focusTo(blockId, 0);
+  };
+
+  // ── Slash key handler ──────────────────────────────────────
+  const onSlashKey = (blockId: string, e: ReactKeyboardEvent<HTMLDivElement>): boolean => {
+    if (!slash || slash.blockId !== blockId) return false;
     const items = slashItems;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -253,94 +155,63 @@ export default function App() {
     if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
       const d = items[Math.min(slashIdx, items.length - 1)];
-      if (d) applySlash(id, d);
-      else {
-        dismissed.current = { id, q: slash.query };
-        setSlash(null);
-      }
+      if (d) applySlash(blockId, d);
+      else { dismissed.current = { id: blockId, q: slash.query }; setSlash(null); }
       return true;
     }
     if (e.key === "Escape") {
       e.preventDefault();
-      dismissed.current = { id, q: slash.query };
+      dismissed.current = { id: blockId, q: slash.query };
       setSlash(null);
       return true;
     }
     return false;
   };
 
+  // ── Block change ───────────────────────────────────────────
+  const onBlockChange = (id: string, html: string, plain: string) => {
+    if (!activePage) return;
+    const blk = activePage.blocks.find((b) => b.id === id);
+    if (!blk) return;
+
+    updateBlock(activePage.id, id, { html });
+
+    if (!TEXT_LIKE.includes(blk.type)) {
+      setSlash((s) => (s?.blockId === id ? null : s));
+      return;
+    }
+
+    if (plain.startsWith("/")) {
+      const q = plain.slice(1).toLowerCase().trim();
+      const wasDismissed = dismissed.current?.id === id && dismissed.current.q === q;
+      if (!wasDismissed) { setSlash({ blockId: id, query: q }); setSlashIdx(0); }
+      return;
+    }
+    setSlash((s) => (s?.blockId === id ? null : s));
+
+    if (blk.type === "text") {
+      applyMarkdownShortcut(activePage.id, id, plain);
+    }
+  };
+
+  // ── Enter key ──────────────────────────────────────────────
   const onEnter = (id: string, offset: number) => {
     if (!activePage) return;
-    const blocks = activePage.blocks;
-    const idx = blocks.findIndex((b) => b.id === id);
-    if (idx < 0) return;
-    const blk = blocks[idx];
-    const plain = stripHtml(blk.html);
-
-    if (plain === "" && blk.type !== "text") {
-      if (blk.type === "divider") {
-        const nb = mkBlock("text");
-        mutateBlocks(activePage.id, (bs) => {
-          const copy = [...bs];
-          copy.splice(idx + 1, 0, nb);
-          return copy;
-        });
-        focusTo(nb.id, 0);
-        return;
-      }
-      convertBlock(id, "text");
-      return;
+    const nb = splitBlock(activePage.id, id, offset);
+    if (nb && typeof nb === "object" && "id" in nb) {
+      setSlash(null);
+      focusTo((nb as Block).id, 0);
     }
-
-    const cont: BlockType =
-      blk.type === "todo" || blk.type === "bullet" || blk.type === "numbered"
-        ? blk.type
-        : blk.type === "quote"
-          ? "quote"
-          : "text";
-    const nb = mkBlock(cont);
-    nb.html = escapeHtml(plain.slice(offset));
-    const head = escapeHtml(plain.slice(0, offset));
-    mutateBlocks(activePage.id, (bs) => {
-      const copy = [...bs];
-      copy[idx] = { ...copy[idx], html: head, v: copy[idx].v + 1 };
-      copy.splice(idx + 1, 0, nb);
-      return copy;
-    });
-    setSlash(null);
-    focusTo(nb.id, 0);
   };
 
+  // ── Backspace at start ─────────────────────────────────────
   const onBackspaceStart = (id: string) => {
     if (!activePage) return;
-    const blocks = activePage.blocks;
-    const idx = blocks.findIndex((b) => b.id === id);
-    if (idx < 0) return;
-    const blk = blocks[idx];
-    const plain = stripHtml(blk.html);
-
-    if (plain === "" && blk.type !== "text") {
-      convertBlock(id, "text");
-      return;
-    }
-    if (idx === 0) return;
-    const prev = blocks[idx - 1];
-    if (!TEXT_LIKE.includes(prev.type)) {
-      mutateBlocks(activePage.id, (bs) => bs.filter((b) => b.id !== id));
-      setSlash(null);
-      return;
-    }
-    const prevPlain = stripHtml(prev.html);
-    mutateBlocks(activePage.id, (bs) => {
-      const copy = [...bs];
-      copy[idx - 1] = { ...prev, html: escapeHtml(prevPlain + plain), v: prev.v + 1 };
-      copy.splice(idx, 1);
-      return copy;
-    });
-    setSlash(null);
-    focusTo(prev.id, prevPlain.length);
+    const result = mergeBlockWithPrev(activePage.id, id);
+    if (result) { setSlash(null); focusTo(result.targetId, result.mergePos); }
   };
 
+  // ── Arrow navigation ───────────────────────────────────────
   const onArrow = (id: string, dir: "up" | "down") => {
     if (!activePage) return;
     const blocks = activePage.blocks;
@@ -350,6 +221,17 @@ export default function App() {
     focusTo(target.id, dir === "up" ? 99999 : 0);
   };
 
+  // ── Number tracking for numbered lists ────────────────────
+  const getNum = (blocks: Block[], idx: number): number => {
+    let n = 1;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (blocks[i].type !== "numbered") break;
+      n++;
+    }
+    return n;
+  };
+
+  // ── Block handlers object ─────────────────────────────────
   const handlers: BlockHandlers = {
     onChange: onBlockChange,
     onEnter,
@@ -365,41 +247,18 @@ export default function App() {
     },
     onDelete: (id) => {
       if (!activePage) return;
-      mutateBlocks(activePage.id, (bs) => {
-        const left = bs.filter((b) => b.id !== id);
-        return left.length ? left : [mkBlock("text")];
-      });
+      removeBlock(activePage.id, id);
       toast("Blok dihapus");
     },
     onDuplicate: (id) => {
       if (!activePage) return;
-      const blk = activePage.blocks.find((b) => b.id === id);
-      if (!blk) return;
-      const copy: Block = {
-        ...blk,
-        id: uid(),
-        v: blk.v + 1,
-        rows: blk.rows ? blk.rows.map((r) => [...r]) : undefined,
-      };
-      mutateBlocks(activePage.id, (bs) => {
-        const i = bs.findIndex((b) => b.id === id);
-        const c = [...bs];
-        c.splice(i + 1, 0, copy);
-        return c;
-      });
-      if (TEXT_LIKE.includes(copy.type)) focusTo(copy.id, 99999);
+      const copy = duplicateBlock(activePage.id, id);
+      if (copy && TEXT_LIKE.includes(copy.type)) focusTo(copy.id, 99999);
       toast("Blok diduplikat");
     },
     onMove: (id, dir) => {
       if (!activePage) return;
-      mutateBlocks(activePage.id, (bs) => {
-        const i = bs.findIndex((b) => b.id === id);
-        const j = dir === "up" ? i - 1 : i + 1;
-        if (i < 0 || j < 0 || j >= bs.length) return bs;
-        const c = [...bs];
-        [c[i], c[j]] = [c[j], c[i]];
-        return c;
-      });
+      moveBlock(activePage.id, id, dir);
     },
     onPlus: (id) => {
       setSlash({ blockId: id, query: "" });
@@ -407,324 +266,494 @@ export default function App() {
     },
     onFormulaChange: (id, expr) => {
       if (!activePage) return;
-      mutateBlocks(activePage.id, (bs) => bs.map((b) => (b.id === id ? { ...b, html: expr } : b)));
+      updateBlock(activePage.id, id, { html: expr });
     },
     onRowsChange: (id, rows) => {
       if (!activePage) return;
-      mutateBlocks(activePage.id, (bs) => bs.map((b) => (b.id === id ? { ...b, rows } : b)));
+      updateBlock(activePage.id, id, { rows });
     },
     onCodeChange: (id, code) => {
       if (!activePage) return;
-      mutateBlocks(activePage.id, (bs) => bs.map((b) => (b.id === id ? { ...b, html: code } : b)));
+      updateBlock(activePage.id, id, { html: code });
     },
     onCodeLang: (id, lang) => {
       if (!activePage) return;
-      mutateBlocks(activePage.id, (bs) => bs.map((b) => (b.id === id ? { ...b, lang } : b)));
+      updateBlock(activePage.id, id, { lang });
+    },
+    onPropsChange: (id, props) => {
+      if (!activePage) return;
+      updateBlock(activePage.id, id, { props });
     },
     onCalloutIcon: (id) => {
       if (!activePage) return;
-      mutateBlocks(activePage.id, (bs) =>
-        bs.map((b) => {
-          if (b.id !== id) return b;
-          const i = CALLOUT_ICONS.indexOf(b.icon ?? "💡");
-          return { ...b, icon: CALLOUT_ICONS[(i + 1) % CALLOUT_ICONS.length] };
-        })
-      );
+      cycleCalloutIcon(activePage.id, id);
     },
     onToast: toast,
   };
 
-  /* ---------- operasi halaman ---------- */
-
-  const createPage = () => {
-    const p: Page = {
-      id: uid(),
-      icon: PAGE_ICONS[Math.floor(Math.random() * PAGE_ICONS.length)],
-      title: "",
-      blocks: [mkBlock("text")],
-      updatedAt: Date.now(),
-    };
-    setPages((ps) => [p, ...ps]);
-    setActiveId(p.id);
-    setMobileNav(false);
-    toast("Halaman baru dibuat");
-    setTimeout(() => setTitleTick((t) => t + 1), 80);
+  // ── DnD handlers ──────────────────────────────────────────
+  const handleDragStart = (event: DragStartEvent) => {
+    setDragActive(event.active.id as string);
   };
 
-  const deletePage = (id: string) => {
-    setPages((ps) => ps.filter((p) => p.id !== id));
-    toast("Halaman dihapus");
-  };
-
-  const copyJson = () => {
+  const handleDragEnd = (event: DragEndEvent) => {
+    setDragActive(null);
     if (!activePage) return;
-    const text = JSON.stringify(activePage, null, 2);
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).then(
-        () => toast("JSON halaman disalin ke clipboard"),
-        () => toast("Gagal menyalin — akses clipboard ditolak")
-      );
-    } else toast("Clipboard tidak tersedia di peramban ini");
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const blocks = activePage.blocks;
+    const oldIdx = blocks.findIndex((b) => b.id === active.id);
+    const newIdx = blocks.findIndex((b) => b.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(blocks, oldIdx, newIdx).map((b, i) => ({
+      ...b,
+      sort_order: i * 1000,
+    }));
+    reorderBlocksLocal(activePage.id, reordered);
   };
 
-  const addTextAtEnd = () => {
-    if (!activePage) return;
-    const nb = mkBlock("text");
-    mutateBlocks(activePage.id, (bs) => [...bs, nb]);
-    focusTo(nb.id, 0);
+  // ── New page ───────────────────────────────────────────────
+  const handleNewPage = async () => {
+    try {
+      await createPage();
+      setMobileNav(false);
+      setTimeout(() => titleRef.current?.focus(), 80);
+    } catch {
+      toast("Gagal membuat halaman");
+    }
   };
 
-  const words = useMemo(
-    () => (activePage ? activePage.blocks.reduce((a, b) => a + countWords(b.html), 0) : 0),
-    [activePage]
-  );
+  // ── Word count ─────────────────────────────────────────────
+  const wordCount = useMemo(() => {
+    if (!activePage) return 0;
+    return activePage.blocks.reduce(
+      (acc, b) => acc + countWords(stripHtml(b.html)),
+      countWords(activePage.title)
+    );
+  }, [activePage]);
 
-  const totalBlocks = useMemo(() => pages.reduce((a, p) => a + p.blocks.length, 0), [pages]);
+  // ── Drag overlay block ─────────────────────────────────────
+  const dragBlock = dragActive
+    ? activePage?.blocks.find((b) => b.id === dragActive)
+    : null;
 
-  const slashFor = (b: Block) =>
-    slash && slash.blockId === b.id
-      ? {
-          query: slash.query,
-          idx: slashIdx,
-          items: slashItems,
-          onIdx: setSlashIdx,
-          onPick: (d: SlashDef) => applySlash(b.id, d),
-        }
-      : null;
-
-  /* ---------- render ---------- */
-
-  if (!activePage) {
+  // ── Loading state ──────────────────────────────────────────
+  if (loading) {
     return (
-      <div className="relative flex h-full items-center justify-center overflow-hidden">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-50"
-          style={{ backgroundImage: "radial-gradient(#d9d6cb 1px, transparent 1px)", backgroundSize: "22px 22px" }}
-        />
-        <div className="pointer-events-none absolute -top-20 right-1/4 h-72 w-72 animate-drift rounded-full bg-pine-soft blur-3xl" />
-        <div className="relative mx-4 max-w-sm animate-rise rounded-2xl border border-line bg-card p-8 text-center shadow-[0_24px_60px_-24px_rgba(21,24,29,0.3)]">
-          <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-pine text-white shadow-[0_10px_24px_-8px_rgba(14,133,120,0.6)]">
-            <IcLogo width={30} height={30} />
-          </span>
-          <h1 className="mt-5 font-display text-2xl font-bold tracking-tight text-ink">
-            Belum ada halaman
-          </h1>
-          <p className="mt-2 text-[14px] leading-relaxed text-fade">
-            Mulai catatan pertamamu — dokumen, tabel, rumus, dan presentasi menunggu untuk diisi.
-          </p>
-          <button
-            type="button"
-            onClick={createPage}
-            className="mt-6 inline-flex h-10 items-center gap-2 rounded-lg bg-pine px-5 text-[13.5px] font-semibold text-white transition hover:-translate-y-px hover:bg-pine-deep hover:shadow-lg active:scale-95"
-          >
-            Buat halaman pertama
-          </button>
-        </div>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flex: 1, background: "var(--bg)", flexDirection: "column", gap: 14,
+      }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: "50%",
+          border: "3px solid var(--border)",
+          borderTopColor: "var(--accent)",
+          animation: "spin-slow 1s linear infinite",
+        }} />
+        <span style={{ color: "var(--text-tertiary)", fontSize: 13 }}>Memuat halaman…</span>
       </div>
     );
   }
 
-  let num = 0;
-
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* sidebar desktop */}
-      <div className="hidden h-full md:block">
+    <div style={{ display: "flex", width: "100%", height: "100dvh", background: "var(--bg)", overflow: "hidden" }}>
+      {/* ── Mobile overlay ── */}
+      {mobileNav && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setMobileNav(false)}
+        />
+      )}
+
+      {/* ── Sidebar ── */}
+      <div style={{
+        position: "fixed" as const,
+        top: 0, left: 0, zIndex: 50, height: "100dvh",
+        transform: mobileNav ? "translateX(0)" : undefined,
+        transition: "transform 0.22s var(--ease-out)",
+        display: "flex",
+      }}
+        className="sidebar no-print"
+      >
         <Sidebar
+          profile={profile}
+          workspace={workspace}
           pages={pages}
-          activeId={activeId}
-          totalBlocks={totalBlocks}
-          onSelect={(id) => { setActiveId(id); setSlash(null); }}
-          onCreate={createPage}
-          onDelete={deletePage}
+          activePageId={activePageId}
+          onSelectPage={(id) => { setActivePageId(id); setMobileNav(false); }}
+          onNewPage={handleNewPage}
+          onDeletePage={async (id) => {
+            try {
+              await deletePage(id);
+              toast("Halaman dihapus");
+            } catch {
+              toast("Gagal menghapus halaman");
+            }
+          }}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onSignOut={onSignOut}
+          saveStatus={saveStatus}
+          onClose={() => setMobileNav(false)}
         />
       </div>
 
-      {/* sidebar mobile */}
-      {mobileNav && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 animate-fadein bg-ink/50" onClick={() => setMobileNav(false)} />
-          <div className="absolute left-0 top-0 h-full animate-pop">
-            <Sidebar
-              pages={pages}
-              activeId={activeId}
-              totalBlocks={totalBlocks}
-              onSelect={(id) => { setActiveId(id); setMobileNav(false); setSlash(null); }}
-              onCreate={createPage}
-              onDelete={deletePage}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* area kerja */}
-      <main className="relative flex-1 overflow-y-auto">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div
-            className="absolute inset-0 opacity-45"
-            style={{ backgroundImage: "radial-gradient(#d9d6cb 1px, transparent 1px)", backgroundSize: "22px 22px" }}
-          />
-          <div className="absolute -top-24 right-[8%] h-80 w-80 animate-drift rounded-full bg-pine-soft blur-3xl" />
-          <div className="absolute left-[12%] top-64 h-64 w-64 animate-drift-2 rounded-full bg-honey-soft blur-3xl" />
-        </div>
-
-        {/* bilah atas */}
-        <header className="sticky top-0 z-30 border-b border-line/80 bg-paper/85 backdrop-blur">
-          <div className="mx-auto flex h-12 max-w-[56rem] items-center justify-between gap-3 px-4 sm:px-8">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <button
-                type="button"
-                aria-label="Buka navigasi"
-                onClick={() => setMobileNav(true)}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fade transition hover:bg-line/70 hover:text-ink md:hidden"
-              >
-                <IcMenu width={16} height={16} />
-              </button>
-              <span className="hidden shrink-0 font-display text-[13.5px] font-bold text-ink sm:inline">
-                pratama<span className="text-pine">lab</span>
-              </span>
-              <span className="hidden text-faint sm:inline">/</span>
-              <span className="truncate text-[13px] text-fade">
-                {activePage.title || "Tanpa judul"}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-2.5">
-              <span className="hidden items-center gap-1.5 text-[11.5px] text-fade sm:flex">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full transition-colors duration-300 ${
-                    saveState === "saving" ? "animate-pulse bg-honey" : "bg-pine"
-                  }`}
-                />
-                {saveState === "saving" ? "Menyimpan…" : "Tersimpan"}
-              </span>
-              <button
-                type="button"
-                title="Salin JSON halaman"
-                onClick={copyJson}
-                className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-card text-fade transition hover:border-pine/50 hover:text-pine-deep hover:shadow-sm active:scale-90"
-              >
-                <IcBraces width={15} height={15} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPresenting(true)}
-                className="inline-flex h-8 items-center gap-2 rounded-lg bg-ink px-3.5 text-[12.5px] font-semibold text-paper shadow-sm transition hover:-translate-y-px hover:bg-ink-3 hover:shadow-md active:scale-95"
-              >
-                <IcPresent width={15} height={15} className="text-pine-bright" />
-                Presentasikan
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* konten halaman */}
-        <div className="relative z-10 mx-auto max-w-[46rem] px-5 pb-36 pt-8 sm:px-8">
-          {/* kepala halaman */}
-          <div className="relative animate-rise">
-            {iconPicker && (
-              <>
-                <div className="fixed inset-0 z-20" onClick={() => setIconPicker(false)} />
-                <div className="absolute left-0 top-16 z-30 grid w-56 animate-pop grid-cols-5 gap-1 rounded-xl border border-line bg-card p-2 shadow-[0_16px_40px_-12px_rgba(21,24,29,0.3)]">
-                  {PAGE_ICONS.map((ic) => (
-                    <button
-                      key={ic}
-                      type="button"
-                      onClick={() => {
-                        mutatePage(activePage.id, (p) => ({ ...p, icon: ic }));
-                        setIconPicker(false);
-                      }}
-                      className={`grid h-9 w-9 place-items-center rounded-lg text-[19px] transition hover:scale-110 hover:bg-pine-soft active:scale-95 ${
-                        activePage.icon === ic ? "bg-pine-soft ring-1 ring-pine/40" : ""
-                      }`}
-                    >
-                      {ic}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-            <button
-              type="button"
-              title="Ganti ikon halaman"
-              onClick={() => setIconPicker((v) => !v)}
-              className="rounded-xl p-2 text-[42px] leading-none transition hover:bg-line/60 active:scale-95"
+      {/* ── Main content ── */}
+      <main style={{
+        flex: 1,
+        marginLeft: 260,
+        display: "flex",
+        flexDirection: "column",
+        height: "100dvh",
+        overflow: "hidden",
+        background: "var(--bg)",
+      }}
+        className="page-content"
+      >
+        {activePage ? (
+          <>
+            {/* ── Top toolbar ── */}
+            <header style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "10px 32px",
+              borderBottom: "1px solid var(--border)",
+              flexShrink: 0, gap: 12,
+              background: "var(--bg)",
+              backdropFilter: "blur(8px)",
+            }}
+              className="toolbar no-print"
             >
-              {activePage.icon}
-            </button>
-            <input
-              ref={titleRef}
-              value={activePage.title}
-              onChange={(e) => mutatePage(activePage.id, (p) => ({ ...p, title: e.target.value }))}
-              placeholder="Tanpa judul"
-              className="mt-1 w-full bg-transparent font-display text-[2.3rem] font-bold leading-tight tracking-tight text-ink outline-none placeholder:text-faint"
-            />
-            <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-fade">
-              <span>Diedit {timeAgo(activePage.updatedAt)}</span>
-              <span className="text-line">•</span>
-              <span>{activePage.blocks.length} blok</span>
-              <span className="text-line">•</span>
-              <span>{words} kata</span>
-              <span className="ml-1 rounded-md bg-pine-soft px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-pine-deep">
-                kanvas bebas
-              </span>
-            </p>
-          </div>
+              {/* Left: mobile menu + breadcrumb */}
+              <div className="toolbar-breadcrumb" style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <button
+                  onClick={() => setMobileNav((v) => !v)}
+                  className="btn btn-icon"
+                  style={{ display: "none" }}
+                  aria-label="Menu"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+                <span style={{ fontSize: 16 }}>{activePage.icon}</span>
+                <span className="toolbar-title" style={{
+                  fontSize: 14, fontWeight: 600,
+                  color: "var(--text-secondary)",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  maxWidth: 220,
+                }}>
+                  {activePage.title || "Tanpa Judul"}
+                </span>
+              </div>
 
-          {/* daftar blok */}
-          <div key={activePage.id} className="mt-7 space-y-[2px]">
-            {activePage.blocks.map((b, i) => {
-              num = b.type === "numbered" ? num + 1 : 0;
-              return (
-                <BlockView
-                  key={b.id}
-                  block={b}
-                  i={i}
-                  num={num || undefined}
-                  h={handlers}
-                  slash={slashFor(b)}
+              {/* Right: collab + actions */}
+              <div className="toolbar-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <CollabCursors pageId={activePage.id} profile={profile} />
+
+                {/* Metadata */}
+                <span className="toolbar-meta" style={{
+                  fontSize: 11.5, color: "var(--text-tertiary)",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}>
+                  <span>{wordCount} kata</span>
+                  <span>·</span>
+                  <span>{timeAgo(activePage.updated_at)}</span>
+                </span>
+
+                {/* Present */}
+                <button
+                  onClick={() => setPresenting(true)}
+                  className="btn btn-ghost btn-sm"
+                  title="Mode presentasi"
+                  style={{ gap: 6 }}
+                >
+                  <IcPresent size={14} />
+                  <span className="toolbar-action-label" style={{ fontSize: 12.5 }}>Presentasi</span>
+                </button>
+
+                {/* Export */}
+                <div style={{ position: "relative" }}>
+                  <button
+                    onClick={() => setExportOpen((v) => !v)}
+                    className="btn btn-ghost btn-sm"
+                    title="Ekspor"
+                    style={{ gap: 6 }}
+                  >
+                    <IcDownload size={14} />
+                    <span className="toolbar-action-label" style={{ fontSize: 12.5 }}>Ekspor</span>
+                  </button>
+                  {exportOpen && (
+                    <ExportMenu page={activePage} onClose={() => setExportOpen(false)} />
+                  )}
+                </div>
+
+                {/* Share */}
+                <button
+                  onClick={() => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("page", activePage.id);
+                    navigator.clipboard?.writeText(url.toString())
+                      .then(() => toast("Tautan halaman disalin"))
+                      .catch(() => toast("Gagal menyalin tautan"));
+                  }}
+                  className="btn btn-ghost btn-sm"
+                  title="Bagikan"
+                  style={{ gap: 6 }}
+                >
+                  <IcShare size={14} />
+                  <span className="toolbar-action-label" style={{ fontSize: 12.5 }}>Bagikan</span>
+                </button>
+              </div>
+            </header>
+
+            {/* ── Page editor ── */}
+            <div style={{
+              flex: 1, overflowY: "auto",
+              padding: "0 max(32px, calc(50% - 380px))",
+              paddingBottom: 120,
+            }}>
+              {/* Cover image */}
+              {activePage.cover_url && (
+                <div style={{
+                  height: 220, marginBottom: 0,
+                  background: `url(${activePage.cover_url}) center/cover`,
+                  marginLeft: "-max(32px, calc(50% - 380px))",
+                  width: "calc(100% + 2 * max(32px, calc(50% - 380px)))",
+                }} />
+              )}
+
+              {/* Page icon + title */}
+              <div style={{ paddingTop: activePage.cover_url ? 0 : 40 }}>
+                {/* Icon picker */}
+                <div style={{ position: "relative", display: "inline-block", marginBottom: 8 }}>
+                  <button
+                    onClick={() => setIconPicker((v) => !v)}
+                    style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      fontSize: 46, lineHeight: 1, padding: "4px 2px",
+                      borderRadius: 12, transition: "transform 0.15s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.08)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                    title="Ganti ikon"
+                  >
+                    {activePage.icon}
+                  </button>
+                  {iconPicker && (
+                    <>
+                      <div
+                        style={{ position: "fixed", inset: 0, zIndex: 90 }}
+                        onClick={() => setIconPicker(false)}
+                      />
+                      <div style={{
+                        position: "absolute", top: "calc(100% + 6px)", left: 0,
+                        zIndex: 100, background: "var(--surface-overlay)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 14, padding: 10,
+                        boxShadow: "var(--shadow-xl)",
+                        display: "flex", flexWrap: "wrap", gap: 5,
+                        maxWidth: 260,
+                        animation: "pop-in 0.15s var(--ease-spring) both",
+                      }}>
+                        {PAGE_ICONS.map((em) => (
+                          <button
+                            key={em}
+                            onClick={() => {
+                              updatePageMeta(activePage.id, { icon: em });
+                              setIconPicker(false);
+                            }}
+                            style={{
+                              background: "none", border: "none", cursor: "pointer",
+                              fontSize: 22, padding: 5, borderRadius: 8,
+                              transition: "background 0.1s",
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                          >
+                            {em}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Title */}
+                <input
+                  ref={titleRef}
+                  value={activePage.title}
+                  onChange={(e) =>
+                    updatePageMeta(activePage.id, { title: e.target.value })
+                  }
+                  placeholder="Judul halaman…"
+                  style={{
+                    display: "block", width: "100%",
+                    fontFamily: "var(--font-display)",
+                    fontSize: "clamp(1.8rem, 4vw, 2.5rem)",
+                    fontWeight: 800, lineHeight: 1.15,
+                    color: "var(--text-primary)",
+                    background: "transparent", border: "none", outline: "none",
+                    marginBottom: 4,
+                    caretColor: "var(--accent)",
+                  }}
                 />
-              );
-            })}
-          </div>
 
-          {/* zona tambah */}
-          <button
-            type="button"
-            onClick={addTextAtEnd}
-            className="mt-3 w-full rounded-lg px-2 py-5 text-left text-[14px] text-faint transition hover:bg-card hover:text-pine-deep"
-          >
-            Klik untuk menulis, atau tekan <span className="kbd">/</span> untuk perintah…
-          </button>
+                {/* Metadata row */}
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 16,
+                  marginBottom: 24, marginTop: 4,
+                  fontSize: 12, color: "var(--text-tertiary)",
+                  borderBottom: "1px solid var(--border)",
+                  paddingBottom: 16,
+                }}>
+                  <span>📅 {new Date(activePage.updated_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</span>
+                  <span>✍️ {activePage.blocks.length} blok</span>
+                  <span>📖 {wordCount} kata</span>
+                </div>
+              </div>
 
-          {/* panduan singkat */}
-          <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-4 text-[11.5px] text-fade">
-            <span className="flex items-center gap-1.5"><span className="kbd">/</span> menu blok</span>
-            <span className="flex items-center gap-1.5"><span className="kbd">Ctrl/⌘ B</span> tebal</span>
-            <span className="flex items-center gap-1.5"><span className="kbd">Ctrl/⌘ I</span> miring</span>
-            <span className="flex items-center gap-1.5"><span className="kbd">Ctrl/⌘ U</span> garis bawah</span>
-            <span className="flex items-center gap-1.5"><span className="kbd">↵</span> blok baru</span>
-            <span className="flex items-center gap-1.5"><span className="kbd">⌫</span> gabung blok</span>
+              {/* ── Block list with DnD ── */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={activePage.blocks.map((b) => b.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div style={{ paddingLeft: 48, position: "relative" }}>
+                    {activePage.blocks.map((block, i) => {
+                      const isSlashBlock = slash?.blockId === block.id;
+                      const slashState: SlashState | null = isSlashBlock
+                        ? {
+                            query: slash!.query,
+                            idx: slashIdx,
+                            items: slashItems,
+                            onIdx: setSlashIdx,
+                            onPick: (d) => applySlash(block.id, d),
+                          }
+                        : null;
+
+                      return (
+                        <BlockView
+                          key={block.id}
+                          block={block}
+                          i={i}
+                          num={
+                            block.type === "numbered"
+                              ? getNum(activePage.blocks, i)
+                              : undefined
+                          }
+                          h={handlers}
+                          slash={slashState}
+                        />
+                      );
+                    })}
+
+                    {/* Click below to add block */}
+                    <div
+                      onClick={() => {
+                        const last = activePage.blocks[activePage.blocks.length - 1];
+                        if (last && stripHtml(last.html) === "" && last.type === "text") {
+                          focusTo(last.id, 0);
+                        } else {
+                          const nb = insertBlock(activePage.id, last?.id ?? null, "text");
+                          focusTo(nb.id, 0);
+                        }
+                      }}
+                      style={{
+                        height: 60, cursor: "text",
+                        display: "flex", alignItems: "center",
+                        color: "var(--text-tertiary)", fontSize: 13.5,
+                        opacity: 0,
+                        transition: "opacity 0.15s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                      onMouseLeave={(e) => (e.currentTarget.style.opacity = "0")}
+                    >
+                      + Klik untuk tambah blok
+                    </div>
+                  </div>
+                </SortableContext>
+
+                {/* Drag overlay */}
+                <DragOverlay>
+                  {dragBlock ? (
+                    <div style={{
+                      background: "var(--surface)",
+                      border: "2px dashed var(--accent)",
+                      borderRadius: 10, padding: "8px 14px",
+                      opacity: 0.85, boxShadow: "var(--shadow-lg)",
+                      fontSize: 14, color: "var(--text-primary)",
+                    }}>
+                      {dragBlock.type} · {stripHtml(dragBlock.html).slice(0, 40) || "—"}
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            </div>
+          </>
+        ) : (
+          /* ── Empty state ── */
+          <div style={{
+            flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+            flexDirection: "column", gap: 16, color: "var(--text-tertiary)",
+          }}>
+            <span style={{ fontSize: 52 }}>📄</span>
+            <p style={{ fontSize: 15, fontWeight: 500, margin: 0 }}>
+              Pilih halaman atau buat yang baru
+            </p>
+            <button
+              onClick={handleNewPage}
+              className="btn btn-primary"
+              style={{ marginTop: 6 }}
+            >
+              + Halaman Baru
+            </button>
           </div>
-        </div>
+        )}
       </main>
 
-      {/* toast */}
-      <div className="fixed bottom-5 right-5 z-[70] space-y-2">
+      {/* ── Present mode ── */}
+      {presenting && activePage && (
+        <Suspense fallback={null}>
+          <PresentMode page={activePage} onClose={() => setPresenting(false)} />
+        </Suspense>
+      )}
+
+      {/* ── Toasts ── */}
+      <div style={{
+        position: "fixed", bottom: 24, left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 500, display: "flex", flexDirection: "column",
+        alignItems: "center", gap: 8, pointerEvents: "none",
+      }}>
         {toasts.map((t) => (
-          <div
-            key={t.id}
-            className="flex animate-toast items-center gap-2.5 rounded-lg bg-ink px-4 py-2.5 text-[13px] font-medium text-paper shadow-[0_12px_30px_-8px_rgba(21,24,29,0.5)]"
-          >
-            <IcCheck width={14} height={14} className="shrink-0 text-pine-bright" />
+          <div key={t.id} className="toast">
             {t.msg}
           </div>
         ))}
       </div>
 
-      {/* mode presentasi */}
-      {presenting && activePage && (
-        <PresentMode page={activePage} onClose={() => setPresenting(false)} />
-      )}
+      {/* ── Mobile styles ── */}
+      <style>{`
+        @media (max-width: 768px) {
+          main { margin-left: 0 !important; }
+          .sidebar { transform: translateX(-100%); }
+          .toolbar button[aria-label="Menu"] { display: grid !important; }
+          .toolbar { padding: 8px 12px !important; gap: 4px !important; }
+          .toolbar-breadcrumb { flex: 1; gap: 6px !important; overflow: hidden; }
+          .toolbar-title { max-width: 92px !important; font-size: 12.5px !important; }
+          .toolbar-actions { gap: 1px !important; }
+          .toolbar-actions .btn { padding: 7px !important; }
+          .toolbar-meta, .toolbar-action-label { display: none !important; }
+          .block-left-controls { opacity: .45 !important; }
+        }
+        .group:hover .block-left-controls { opacity: 1 !important; }
+      `}</style>
     </div>
   );
 }

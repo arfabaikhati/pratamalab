@@ -70,16 +70,16 @@ export default function TableBlock({
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover/tbl:opacity-100">
         <button type="button" className={toolBtn} onClick={addRow}>
-          <IcPlus width={12} height={12} /> Baris
+          <IcPlus size={12} /> Baris
         </button>
         <button type="button" className={toolBtn} onClick={addCol}>
-          <IcPlus width={12} height={12} /> Kolom
+          <IcPlus size={12} /> Kolom
         </button>
         <button type="button" className={toolBtn} onClick={delRow} disabled={rows.length <= 1}>
-          <IcMinus width={12} height={12} /> Baris
+          <IcMinus size={12} /> Baris
         </button>
         <button type="button" className={toolBtn} onClick={delCol} disabled={cols <= 1}>
-          <IcMinus width={12} height={12} /> Kolom
+          <IcMinus size={12} /> Kolom
         </button>
         <span className="ml-1 hidden text-[11px] text-faint sm:inline">
           {rows.length} × {cols}

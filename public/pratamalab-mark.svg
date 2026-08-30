@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Pratamalab</title>
+  <defs>
+    <linearGradient id="g" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C6CF2"/>
+      <stop offset="1" stop-color="#0E8578"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#g)"/>
+  <path d="M25 14h14M28 14v14L17.5 46.5A4 4 0 0 0 21 52h22a4 4 0 0 0 3.5-5.5L36 28V14" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22 39h20" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="29" cy="45" r="2" fill="#fff"/>
+  <circle cx="36" cy="48" r="2.5" fill="#fff" opacity=".85"/>
+</svg>

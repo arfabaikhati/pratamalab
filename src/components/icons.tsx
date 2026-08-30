@@ -1,277 +1,154 @@
-import type { ReactNode, SVGProps } from "react";
 import type { BlockType } from "../types";
 
-type P = SVGProps<SVGSVGElement>;
+// ─── Shared SVG icon components ──────────────────────────────
 
-function S({ children, ...p }: P & { children: ReactNode }) {
+export function IcLogo({ size = 20 }: { size?: number }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...p}
-    >
-      {children}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 3h4M11 3v5.2L5.8 17.5A2.4 2.4 0 0 0 8 21h8a2.4 2.4 0 0 0 2.2-3.5L13 8.2V3" />
+      <path d="M7.6 14.5h8.8" />
     </svg>
   );
 }
 
-export const IcLogo = (p: P) => (
-  <S {...p}>
-    <path d="M10 3h4" />
-    <path d="M11 3v5.2L5.8 17.5A2.4 2.4 0 0 0 8 21h8a2.4 2.4 0 0 0 2.2-3.5L13 8.2V3" />
-    <path d="M7.6 14.5h8.8" />
-    <circle cx="10.6" cy="17.6" r="0.5" fill="currentColor" stroke="none" />
-    <circle cx="13.6" cy="18.4" r="0.4" fill="currentColor" stroke="none" />
-  </S>
-);
+export function IcMenu({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
 
-export const IcSearch = (p: P) => (
-  <S {...p}>
-    <circle cx="11" cy="11" r="7" />
-    <path d="m16.6 16.6 4.4 4.4" />
-  </S>
-);
+export function IcSearch({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+    </svg>
+  );
+}
 
-export const IcPlus = (p: P) => (
-  <S {...p}>
-    <path d="M12 5v14M5 12h14" />
-  </S>
-);
+export function IcPlus({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
 
-export const IcMinus = (p: P) => (
-  <S {...p}>
-    <path d="M5 12h14" />
-  </S>
-);
+export function IcMinus({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
 
-export const IcX = (p: P) => (
-  <S {...p}>
-    <path d="M6 6l12 12M18 6 6 18" />
-  </S>
-);
+export function IcSigma({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 4H6l6 8-6 8h12" />
+    </svg>
+  );
+}
 
-export const IcCheck = (p: P) => (
-  <S {...p}>
-    <path d="m4.5 12.5 5 5 10-11" />
-  </S>
-);
+export function IcTrash({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4h6v2" />
+    </svg>
+  );
+}
 
-export const IcTrash = (p: P) => (
-  <S {...p}>
-    <path d="M4 7h16" />
-    <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-    <path d="m6 7 .8 12.2A2 2 0 0 0 8.8 21h6.4a2 2 0 0 0 2-1.8L18 7" />
-    <path d="M10 11v6M14 11v6" />
-  </S>
-);
+export function IcPresent({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <path d="M8 21h8M12 17v4" />
+    </svg>
+  );
+}
 
-export const IcCopy = (p: P) => (
-  <S {...p}>
-    <rect x="9" y="9" width="11" height="11" rx="2" />
-    <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-  </S>
-);
+export function IcDownload({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
 
-export const IcPlay = (p: P) => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" {...p}>
-    <path d="M8 5.4v13.2a.6.6 0 0 0 .9.5l10.4-6.6a.6.6 0 0 0 0-1L8.9 4.9a.6.6 0 0 0-.9.5Z" />
-  </svg>
-);
+export function IcShare({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+    </svg>
+  );
+}
 
-export const IcPresent = (p: P) => (
-  <S {...p}>
-    <rect x="3" y="4" width="18" height="12" rx="2" />
-    <path d="M12 16v4M8 20h8" />
-    <path d="m10.5 8 4 2.5-4 2.5Z" fill="currentColor" stroke="none" />
-  </S>
-);
+export function IcSun({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
+}
 
-export const IcChevL = (p: P) => (
-  <S {...p}>
-    <path d="m14.5 5.5-6.5 6.5 6.5 6.5" />
-  </S>
-);
+export function IcMoon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
 
-export const IcChevR = (p: P) => (
-  <S {...p}>
-    <path d="m9.5 5.5 6.5 6.5-6.5 6.5" />
-  </S>
-);
+export function IcCheck({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m5 13 4.5 4.5L19 7" />
+    </svg>
+  );
+}
 
-export const IcChevD = (p: P) => (
-  <S {...p}>
-    <path d="m5.5 9.5 6.5 6.5 6.5-6.5" />
-  </S>
-);
+export function IcCopy({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
 
-export const IcArrowUp = (p: P) => (
-  <S {...p}>
-    <path d="M12 19V5" />
-    <path d="m5.5 11.5 6.5-6.5 6.5 6.5" />
-  </S>
-);
+// ─── Block type icon map ──────────────────────────────────────
 
-export const IcArrowDown = (p: P) => (
-  <S {...p}>
-    <path d="M12 5v14" />
-    <path d="m5.5 12.5 6.5 6.5 6.5-6.5" />
-  </S>
-);
-
-export const IcGrip = (p: P) => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" {...p}>
-    <circle cx="9" cy="6" r="1.4" />
-    <circle cx="15" cy="6" r="1.4" />
-    <circle cx="9" cy="12" r="1.4" />
-    <circle cx="15" cy="12" r="1.4" />
-    <circle cx="9" cy="18" r="1.4" />
-    <circle cx="15" cy="18" r="1.4" />
-  </svg>
-);
-
-export const IcDots = (p: P) => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" {...p}>
-    <circle cx="5" cy="12" r="1.7" />
-    <circle cx="12" cy="12" r="1.7" />
-    <circle cx="19" cy="12" r="1.7" />
-  </svg>
-);
-
-export const IcMenu = (p: P) => (
-  <S {...p}>
-    <path d="M4 7h16M4 12h16M4 17h16" />
-  </S>
-);
-
-export const IcBraces = (p: P) => (
-  <S {...p}>
-    <path d="M8 4C6.3 4 5.8 5 5.8 6.4v2.1C5.8 10 4.8 11 3.6 11v2c1.2 0 2.2 1 2.2 2.5v2.1C5.8 19 6.3 20 8 20" />
-    <path d="M16 4c1.7 0 2.2 1 2.2 2.4v2.1c0 1.5 1 2.5 2.2 2.5v2c-1.2 0-2.2 1-2.2 2.5v2.1c0 1.4-.5 2.4-2.2 2.4" />
-  </S>
-);
-
-export const IcSpark = (p: P) => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" {...p}>
-    <path d="M12 2.8 13.9 9l6.2 1.9-6.2 1.9L12 19l-1.9-6.2L3.9 10.9 10.1 9 12 2.8Z" />
-    <circle cx="19" cy="18.5" r="1.6" />
-  </svg>
-);
-
-/* --- ikon jenis blok --- */
-
-export const IcType = (p: P) => (
-  <S {...p}>
-    <path d="M5 7V4h14v3M12 4v16M9 20h6" />
-  </S>
-);
-
-export const IcH1 = (p: P) => (
-  <S {...p}>
-    <path d="M4 12h8M4 18V6M12 18V6" />
-    <path d="m17.5 11 2.5-1.6V18" />
-  </S>
-);
-
-export const IcH2 = (p: P) => (
-  <S {...p}>
-    <path d="M4 12h8M4 18V6M12 18V6" />
-    <path d="M16.5 10.7c.3-1 1.3-1.7 2.4-1.7 1.4 0 2.4.9 2.4 2.1 0 2.2-4.8 3.6-4.8 6.9h5" />
-  </S>
-);
-
-export const IcH3 = (p: P) => (
-  <S {...p}>
-    <path d="M4 12h8M4 18V6M12 18V6" />
-    <path d="M16.4 9.4 19 7v10" />
-    <path d="M16.3 11.7c2.6 0 4 .8 4 2.2 0 1.3-1.5 2.1-4 2.1" />
-  </S>
-);
-
-export const IcTodo = (p: P) => (
-  <S {...p}>
-    <rect x="3.5" y="3.5" width="17" height="17" rx="4.5" />
-    <path d="m8.2 12.4 2.6 2.6 5-5.8" />
-  </S>
-);
-
-export const IcList = (p: P) => (
-  <S {...p}>
-    <path d="M9.5 6h11M9.5 12h11M9.5 18h11" />
-    <circle cx="4.5" cy="6" r="1.1" fill="currentColor" stroke="none" />
-    <circle cx="4.5" cy="12" r="1.1" fill="currentColor" stroke="none" />
-    <circle cx="4.5" cy="18" r="1.1" fill="currentColor" stroke="none" />
-  </S>
-);
-
-export const IcListOrdered = (p: P) => (
-  <S {...p}>
-    <path d="M10 6h10.5M10 12h10.5M10 18h10.5" />
-    <path d="M4 5.5h1.2V10M3.6 10h2.6" />
-    <path d="M3.8 13.6c.4-.7 1.2-1.1 2-1.1 1 0 1.7.6 1.7 1.4 0 1.6-3.5 2.2-3.5 4.1h3.8" transform="translate(0 .2)" />
-  </S>
-);
-
-export const IcQuote = (p: P) => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" {...p}>
-    <path d="M5 13.2C5 9.6 7.3 7 10.6 6l.7 1.6c-2 .8-3.2 2.3-3.4 3.7H11v6H5v-4.1Z" />
-    <path d="M13.4 13.2C13.4 9.6 15.7 7 19 6l.7 1.6c-2 .8-3.2 2.3-3.4 3.7h3.1v6h-6v-4.1Z" />
-  </svg>
-);
-
-export const IcBulb = (p: P) => (
-  <S {...p}>
-    <path d="M12 3a6 6 0 0 1 4 10.5c-.8.7-1 1.5-1 2.5H9c0-1-.2-1.8-1-2.5A6 6 0 0 1 12 3Z" />
-    <path d="M9.5 19h5M10.5 21.5h3" />
-  </S>
-);
-
-export const IcTable = (p: P) => (
-  <S {...p}>
-    <rect x="3" y="4.5" width="18" height="15" rx="2" />
-    <path d="M3 9.5h18M12 9.5V19.5M3 14.5h18" />
-  </S>
-);
-
-export const IcSigma = (p: P) => (
-  <S {...p}>
-    <path d="M18 6.5V5H6.5l5.2 7-5.2 7H18v-1.5" />
-  </S>
-);
-
-export const IcCode = (p: P) => (
-  <S {...p}>
-    <path d="m8.5 7-5 5 5 5M15.5 7l5 5-5 5" />
-  </S>
-);
-
-export const IcDividerLine = (p: P) => (
-  <S {...p}>
-    <path d="M4 12h16" />
-    <path d="M7 6.5h10M7 17.5h10" opacity=".35" />
-  </S>
-);
-
-export function iconFor(type: BlockType, cls?: string) {
-  const p = cls ? { className: cls } : {};
+export function iconFor(type: BlockType): React.ReactNode {
+  const s = { width: 15, height: 15 };
   switch (type) {
-    case "text": return <IcType {...p} />;
-    case "h1": return <IcH1 {...p} />;
-    case "h2": return <IcH2 {...p} />;
-    case "h3": return <IcH3 {...p} />;
-    case "todo": return <IcTodo {...p} />;
-    case "bullet": return <IcList {...p} />;
-    case "numbered": return <IcListOrdered {...p} />;
-    case "quote": return <IcQuote {...p} />;
-    case "callout": return <IcBulb {...p} />;
-    case "table": return <IcTable {...p} />;
-    case "formula": return <IcSigma {...p} />;
-    case "code": return <IcCode {...p} />;
-    case "divider": return <IcDividerLine {...p} />;
+    case "text":     return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>;
+    case "h1":       return <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 13, lineHeight: 1 }}>H1</span>;
+    case "h2":       return <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 12, lineHeight: 1 }}>H2</span>;
+    case "h3":       return <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 11, lineHeight: 1 }}>H3</span>;
+    case "todo":     return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m9 12 2.5 2.5L16 9"/></svg>;
+    case "bullet":   return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.5" fill="currentColor"/><circle cx="3.5" cy="12" r="1.5" fill="currentColor"/><circle cx="3.5" cy="18" r="1.5" fill="currentColor"/></svg>;
+    case "numbered": return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4M4 10h2M6 18H4l2-2.7a1.8 1.8 0 0 0-3.3-1"/></svg>;
+    case "quote":    return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>;
+    case "callout":  return <span style={{ fontSize: 14 }}>💡</span>;
+    case "code":     return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
+    case "formula":  return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h7l1 9 1-6h7"/><path d="M6 15h12"/></svg>;
+    case "table":    return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>;
+    case "divider":  return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="3" y1="12" x2="21" y2="12"/></svg>;
+    case "image":    return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
+    case "embed":    return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
+    case "toggle":   return <svg {...s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>;
+    default:         return <span style={{ fontSize: 14 }}>📝</span>;
   }
 }

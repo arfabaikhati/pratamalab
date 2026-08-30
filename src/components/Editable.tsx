@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { FocusReq } from "../types";
+import { sanitizeHtml } from "../lib/util";
 
 export function getCaretOffset(el: HTMLElement): number {
   const sel = window.getSelection();
@@ -57,8 +58,9 @@ interface Props {
   onEnter?: (offset: number) => void;
   onBackspaceStart?: () => void;
   onArrowNav?: (dir: "up" | "down") => void;
-  /** return true untuk menelan event (mis. saat menu slash terbuka) */
   onKeyDown?: (e: ReactKeyboardEvent<HTMLDivElement>) => boolean | void;
+  onSelect?: () => void;
+  onBlur?: () => void;
   spellCheck?: boolean;
 }
 
@@ -73,6 +75,8 @@ export default function Editable({
   onBackspaceStart,
   onArrowNav,
   onKeyDown,
+  onSelect,
+  onBlur,
   spellCheck,
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -81,9 +85,8 @@ export default function Editable({
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.innerHTML = html || "";
+    el.innerHTML = sanitizeHtml(html || "");
     setEmpty(!(el.textContent ?? "").trim());
-    // hanya jalankan saat mount / remount via mountKey
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mountKey]);
 
@@ -98,7 +101,7 @@ export default function Editable({
   const handleInput = () => {
     const el = ref.current;
     if (!el) return;
-    let h = el.innerHTML;
+    let h = sanitizeHtml(el.innerHTML);
     if (h === "<br>" || h === "<div><br></div>") {
       h = "";
       el.innerHTML = "";
@@ -108,7 +111,16 @@ export default function Editable({
     onChange?.(h, plain);
   };
 
+  const insertPlainText = (text: string) => {
+    document.execCommand("insertText", false, text);
+  };
+
   const handleKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    // Ctrl+B / Ctrl+I / Ctrl+U — let browser handle
+    if ((e.ctrlKey || e.metaKey) && ["b","i","u"].includes(e.key.toLowerCase())) {
+      return; // allow default execCommand
+    }
+
     if (onKeyDown && onKeyDown(e) === true) return;
     const el = ref.current;
     if (!el) return;
@@ -152,9 +164,21 @@ export default function Editable({
       data-ph={ph ?? ""}
       data-empty={empty}
       spellCheck={spellCheck ?? true}
-      className={`editable whitespace-pre-wrap break-words ${className ?? ""}`}
+      className={`editable ${className ?? ""}`}
+      style={{ position: "relative" }}
       onInput={handleInput}
+      onPaste={(e) => {
+        e.preventDefault();
+        insertPlainText(e.clipboardData.getData("text/plain"));
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        insertPlainText(e.dataTransfer.getData("text/plain"));
+      }}
       onKeyDown={handleKey}
+      onMouseUp={onSelect}
+      onKeyUp={onSelect}
+      onBlur={onBlur}
     />
   );
 }

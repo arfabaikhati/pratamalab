@@ -1,6 +1,6 @@
-# 🧪 Pratamalab
+# Pratamalab
 
-Ruang kerja serba bisa untuk menulis — dokumen, tabel, rumus, kode, hingga presentasi — dalam satu halaman bergaya blok seperti Notion.
+Workspace blok modern untuk dokumen, tabel, rumus, kode, dan presentasi. Aplikasi bisa langsung dipakai dalam mode lokal tanpa database, lalu dihubungkan ke Supabase/PostgreSQL untuk autentikasi, penyimpanan cloud, presence, dan sinkronisasi realtime.
 
 ## Fitur
 
@@ -11,14 +11,20 @@ Ruang kerja serba bisa untuk menulis — dokumen, tabel, rumus, kode, hingga pre
 - **Mode presentasi** — ubah halaman apa pun menjadi slide; Judul 1/2 menjadi pemisah slide, navigasi `← →`, keluar dengan `Esc`.
 - **Blok kode** — dengan pilihan bahasa dan tombol salin.
 - **Manajemen halaman** — cari, buat, hapus (konfirmasi dua langkah), ganti ikon & judul.
-- **Simpan otomatis** — seluruh data di `localStorage`, tetap ada setelah refresh. Ekspor halaman sebagai JSON.
+- **Simpan otomatis** — `localStorage` dalam mode lokal, Supabase/PostgreSQL dalam mode cloud.
+- **Ekspor** — Markdown, HTML aman, JSON, CSV untuk blok tabel, dan PDF melalui dialog cetak.
+- **Kolaborasi** — presence dan sinkronisasi blok realtime ketika Supabase dikonfigurasi.
 
-## Menjalankan lokal
+## Menjalankan di Laragon
+
+Buka Terminal Laragon pada folder proyek ini, lalu jalankan:
 
 ```bash
 npm install
-npm run dev        # buka http://localhost:5173
+npm run dev
 ```
+
+Buka `http://localhost:3000`. Nilai placeholder atau kosong di `.env.local` otomatis mengaktifkan mode lokal, jadi halaman demo dapat langsung dibuat dan diedit tanpa login atau database.
 
 Build produksi:
 
@@ -27,9 +33,26 @@ npm run build
 npm run preview
 ```
 
-## Deploy
+Build produksi berada di `dist/`.
 
-Hasil build ada di folder `dist/` — bisa langsung dideploy ke **Vercel**, **Netlify**, atau **GitHub Pages** tanpa konfigurasi tambahan.
+## Mengaktifkan database dan kolaborasi
+
+Backend aplikasi menggunakan Supabase (PostgreSQL + Auth + Realtime), bukan MySQL Laragon.
+
+1. Buat proyek Supabase.
+2. Jalankan seluruh isi `supabase/migrations/001_init.sql` di SQL Editor Supabase.
+3. Salin `.env.example` menjadi `.env.local`, lalu isi URL proyek dan **anon/publishable key**. Jangan pernah memakai `service_role` key di frontend.
+4. Di Supabase Auth URL Configuration, tambahkan `http://localhost:3000` sebagai Site URL dan redirect URL.
+5. Jalankan ulang `npm run dev`, daftar akun, lalu login.
+
+Skema mengaktifkan Row Level Security untuk profil, workspace, halaman, blok, komentar, dan tautan berbagi. Workspace pertama beserta membership owner dibuat otomatis dan atomik melalui trigger database.
+
+## Verifikasi
+
+```bash
+npm run typecheck
+npm run build
+```
 
 ## Tech stack
 

@@ -1,70 +1,130 @@
+import { useEffect, useRef } from "react";
 import type { SlashDef } from "../types";
 import { iconFor } from "./icons";
 
 interface Props {
-  items: SlashDef[];
+  query: string;
   idx: number;
+  items: SlashDef[];
   onIdx: (i: number) => void;
   onPick: (d: SlashDef) => void;
-  query: string;
 }
 
-export default function SlashMenu({ items, idx, onIdx, onPick, query }: Props) {
+const GROUPS: Record<string, string> = {
+  Teks: "📝", Judul: "🔤", List: "📋",
+  Media: "🖼", Data: "📊", Lainnya: "✨",
+};
+
+export default function SlashMenu({ query, idx, items, onIdx, onPick }: Props) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    const el = listRef.current?.querySelector(`[data-slash-idx="${idx}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ block: "nearest" });
+  }, [idx]);
+
+  if (items.length === 0) {
+    return (
+      <div
+        className="slash-menu"
+        style={{
+          position: "absolute", top: "100%", left: 0,
+          zIndex: 200, padding: "10px 12px", minWidth: 220,
+        }}
+      >
+        <p style={{ margin: 0, fontSize: 13, color: "var(--text-tertiary)" }}>
+          Tidak ada blok untuk <strong>/{query}</strong>
+        </p>
+      </div>
+    );
+  }
+
+  // Group by block group
+  const grouped: Record<string, SlashDef[]> = {};
+  for (const item of items) {
+    const g = item.group ?? "Lainnya";
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(item);
+  }
+
+  let globalIdx = 0;
+
   return (
-    <div className="absolute left-0 top-full z-40 mt-2 w-[min(20rem,calc(100vw-3rem))] animate-pop overflow-hidden rounded-xl border border-line bg-card shadow-[0_16px_40px_-12px_rgba(21,24,29,0.28)]">
-      <div className="flex items-center justify-between border-b border-line/70 px-3.5 py-2">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-fade">
-          Sisipkan blok
-        </span>
-        {query && (
-          <span className="rounded-md bg-pine-soft px-1.5 py-0.5 font-mono text-[10.5px] text-pine-deep">
-            /{query}
-          </span>
-        )}
-      </div>
+    <div
+      className="slash-menu"
+      ref={listRef}
+      style={{
+        position: "absolute", top: "100%", left: 0,
+        zIndex: 200, minWidth: 260, maxWidth: 320,
+        maxHeight: 360, overflowY: "auto",
+        padding: "6px",
+      }}
+    >
+      {query && (
+        <div style={{
+          padding: "3px 8px 6px",
+          fontSize: 11, fontWeight: 700,
+          color: "var(--text-tertiary)",
+          letterSpacing: "0.06em",
+        }}>
+          / {query}
+        </div>
+      )}
 
-      <div className="max-h-72 overflow-y-auto p-1.5">
-        {items.length === 0 ? (
-          <div className="px-3 py-6 text-center">
-            <p className="text-[13px] font-medium text-fade">Tidak ada blok “{query}”</p>
-            <p className="mt-1 text-[12px] text-faint">Coba kata lain: tabel, rumus, kutipan…</p>
+      {Object.entries(grouped).map(([group, groupItems]) => (
+        <div key={group}>
+          <div style={{
+            padding: "4px 8px 3px",
+            fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em",
+            textTransform: "uppercase", color: "var(--text-tertiary)",
+          }}>
+            {group}
           </div>
-        ) : (
-          items.map((d, i) => (
-            <button
-              key={d.type}
-              type="button"
-              onMouseEnter={() => onIdx(i)}
-              onClick={() => onPick(d)}
-              className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                i === idx ? "bg-pine-soft" : "hover:bg-paper"
-              }`}
-            >
-              <span
-                className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition-colors ${
-                  i === idx
-                    ? "border-pine/40 bg-card text-pine-deep"
-                    : "border-line bg-card text-fade"
-                }`}
+          {groupItems.map((item) => {
+            const myIdx = globalIdx++;
+            const active = myIdx === idx;
+            return (
+              <button
+                key={item.type}
+                data-slash-idx={myIdx}
+                onClick={() => onPick(item)}
+                onMouseEnter={() => onIdx(myIdx)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  width: "100%", padding: "8px 10px",
+                  border: "none", borderRadius: 8,
+                  background: active ? "var(--accent-soft)" : "transparent",
+                  cursor: "pointer", textAlign: "left",
+                  transition: "background 0.1s",
+                  fontFamily: "var(--font-sans)",
+                }}
               >
-                {iconFor(d.type)}
-              </span>
-              <span className="min-w-0">
-                <span className={`block text-[13.5px] font-semibold ${i === idx ? "text-pine-deep" : "text-ink"}`}>
-                  {d.label}
+                <span style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: active ? "var(--accent)" : "var(--bg-tertiary)",
+                  display: "grid", placeItems: "center",
+                  color: active ? "#fff" : "var(--text-secondary)",
+                  flexShrink: 0, transition: "all 0.12s",
+                }}>
+                  {iconFor(item.type)}
                 </span>
-                <span className="block truncate text-[11.5px] text-fade">{d.desc}</span>
-              </span>
-            </button>
-          ))
-        )}
-      </div>
-
-      <div className="flex items-center gap-2 border-t border-line/70 bg-paper/60 px-3.5 py-2 text-[10.5px] text-faint">
-        <span className="kbd">↑↓</span> navigasi
-        <span className="kbd">↵</span> pilih
-        <span className="kbd">esc</span> tutup
-      </div>
+                <div>
+                  <div style={{
+                    fontSize: 13.5, fontWeight: 600,
+                    color: active ? "var(--accent-dark)" : "var(--text-primary)",
+                  }}>
+                    {item.label}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 1 }}>
+                    {item.desc}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

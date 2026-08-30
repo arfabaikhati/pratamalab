@@ -45,7 +45,7 @@ export default function FormulaBlock({
     <div className="my-1 rounded-xl border border-line bg-card px-4 pb-3.5 pt-3 shadow-sm transition-shadow hover:shadow-md">
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-md bg-pine-soft px-2 py-0.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-pine-deep">
-          <IcSigma width={11} height={11} /> Rumus
+          <IcSigma size={11} /> Rumus
         </span>
         <div className="hidden flex-wrap items-center gap-1 sm:flex">
           {CHIPS.map((c) => (
