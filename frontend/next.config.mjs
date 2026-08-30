@@ -2,17 +2,10 @@
 const nextConfig = {
   images: {
     remotePatterns: [
-      { protocol: "http", hostname: "localhost" },
+      { protocol: "http",  hostname: "localhost" },
+      { protocol: "http",  hostname: "pratamalab.test" },
       { protocol: "https", hostname: "**" },
     ],
-  },
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: "http://localhost:8000/api/:path*",
-      },
-    ];
   },
 };
 
